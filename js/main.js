@@ -22,6 +22,10 @@ import { WorldMap } from './worldmap.js';
 import { LevelPlayer } from './levelplayer.js';
 import * as Parallax2 from './parallax.js';
 import { Special } from './speciallevels.js';
+import { Practice } from './practice.js';
+import { Tutorial } from './tutorial.js';
+import { ACHIEVEMENTS } from './achievements.js';
+import { SKINS, TRAILS } from './economy.js';
 
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
@@ -67,9 +71,9 @@ function showTitle(){
   `);
   document.getElementById('btn-play').onclick = () => showModeSelect();
   document.getElementById('btn-shop').onclick = () => Shop.open(showTitle);
-  document.getElementById('btn-collection').onclick = () => UI.toast('Collection opens in Phase 8');
+  document.getElementById('btn-collection').onclick = () => showCollection();
   document.getElementById('btn-stats').onclick = () => showStats();
-  document.getElementById('btn-options').onclick = () => UI.toast('Options opens in Phase 8');
+  document.getElementById('btn-options').onclick = () => showOptions();
 
   // Konami detector
   konamiBuffer.length = 0;
@@ -104,6 +108,112 @@ function showModeSelect(){
     showTitle
   );
   document.getElementById('m-back').onclick = showTitle;
+}
+
+function showCollection(){
+  Game.setState(State.COLLECTION);
+  Achievements.load();
+  let tab = 'achievements';
+  const render = () => {
+    let body = '';
+    if (tab === 'achievements'){
+      body = ACHIEVEMENTS.map(a => {
+        const got = Achievements.isUnlocked(a.id);
+        return `<div class="card ${got?'owned':'locked'}">
+          <div class="icon">${got?'🏆':'🔒'}</div>
+          <div class="name">${a.name}</div>
+          <div class="desc">${a.desc}</div>
+          <div class="cost dp">${got?'UNLOCKED':'+'+a.dp+' DP'}</div>
+        </div>`;
+      }).join('');
+    } else if (tab === 'skins'){
+      body = SKINS.map(s => {
+        const owned = Economy.ownsSkin(s.id);
+        const equipped = Economy.currentSkin === s.id;
+        const swatch = s.color === 'rainbow' ? 'linear-gradient(90deg,red,orange,yellow,green,blue,purple)' : s.color || '#00f0ff';
+        return `<div class="card ${owned?'owned':'locked'}">
+          <div class="icon" style="height:30px;background:${swatch};border-radius:4px"></div>
+          <div class="name">${s.name}</div>
+          <div class="desc">${s.desc}</div>
+          ${owned? (equipped?`<button class="btn" disabled style="opacity:.5">EQUIPPED</button>`:`<button class="btn" data-eq="${s.id}">EQUIP</button>`):''}
+        </div>`;
+      }).join('');
+    } else if (tab === 'trails'){
+      body = TRAILS.map(t => {
+        const owned = Economy.ownsTrail(t.id);
+        const equipped = Economy.currentTrail === t.id;
+        return `<div class="card ${owned?'owned':'locked'}">
+          <div class="name">${t.name}</div>
+          ${owned? (equipped?`<button class="btn" disabled style="opacity:.5">EQUIPPED</button>`:`<button class="btn" data-eq="${t.id}">EQUIP</button>`):''}
+        </div>`;
+      }).join('');
+    }
+    UI.showScreen('coll', `
+      <h1>COLLECTION</h1>
+      <div class="tabbar">
+        <button class="tab ${tab==='achievements'?'active':''}" data-tab="achievements">ACHIEVEMENTS ${Achievements.unlocked.size}/20</button>
+        <button class="tab ${tab==='skins'?'active':''}" data-tab="skins">SKINS</button>
+        <button class="tab ${tab==='trails'?'active':''}" data-tab="trails">TRAILS</button>
+      </div>
+      <div class="grid shop-grid">${body}</div>
+      <button class="btn alt" id="c-back">BACK</button>
+    `);
+    document.querySelectorAll('[data-tab]').forEach(t => t.onclick = () => { tab = t.dataset.tab; render(); });
+    document.querySelectorAll('[data-eq]').forEach(b => b.onclick = () => {
+      if (tab === 'skins') Economy.equipSkin(b.dataset.eq); else Economy.equipTrail(b.dataset.eq);
+      UI.toast('Equipped!', '#00f0ff'); render();
+    });
+    document.getElementById('c-back').onclick = showTitle;
+  };
+  render();
+}
+
+function showOptions(){
+  Game.setState(State.OPTIONS);
+  const o = Game.options;
+  UI.showScreen('opt', `
+    <h1>OPTIONS</h1>
+    <div class="col" style="width:min(520px,90vw);gap:6px;align-items:stretch">
+      <div class="slider-row"><label>SFX Volume</label><input type="range" min="0" max="100" value="${o.sfxVol*100}" data-opt="sfxVol"></div>
+      <div class="slider-row"><label>Music Volume</label><input type="range" min="0" max="100" value="${o.musicVol*100}" data-opt="musicVol"></div>
+      <div class="slider-row"><label>Master Volume</label><input type="range" min="0" max="100" value="${o.masterVol*100}" data-opt="masterVol"></div>
+      <div class="slider-row"><label>Screen Shake</label><input type="range" min="0" max="100" value="${o.shake*100}" data-opt="shake"></div>
+      <div class="slider-row"><label>Particles</label>
+        <select data-opt="particles">
+          <option ${o.particles==='low'?'selected':''}>low</option>
+          <option ${o.particles==='medium'?'selected':''}>medium</option>
+          <option ${o.particles==='high'?'selected':''}>high</option>
+        </select></div>
+      <div class="slider-row"><label>Reduced Motion</label><input type="checkbox" ${o.reducedMotion?'checked':''} data-opt="reducedMotion"></div>
+      <div class="slider-row"><label>High Contrast</label><input type="checkbox" ${o.highContrast?'checked':''} data-opt="highContrast"></div>
+      <div class="slider-row"><label>Color-blind Mode</label><input type="checkbox" ${o.colorBlind?'checked':''} data-opt="colorBlind"></div>
+      <div class="slider-row"><label>Show FPS</label><input type="checkbox" ${o.showFps?'checked':''} data-opt="showFps"></div>
+      <div class="slider-row"><label>Show Hitboxes</label><input type="checkbox" ${o.showHitboxes?'checked':''} data-opt="showHitboxes"></div>
+      <div class="slider-row"><label>Skip Tutorial</label><input type="checkbox" ${o.skipTutorial?'checked':''} data-opt="skipTutorial"></div>
+    </div>
+    <div class="row">
+      <button class="btn alt" id="opt-tutorial">REPLAY TUTORIAL</button>
+      <button class="btn danger" id="opt-reset">RESET ALL DATA</button>
+      <button class="btn" id="opt-back">BACK</button>
+    </div>
+  `);
+  document.querySelectorAll('[data-opt]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      const key = el.dataset.opt;
+      if (el.type === 'range') Game.options[key] = (+el.value)/100;
+      else if (el.type === 'checkbox') Game.options[key] = el.checked;
+      else Game.options[key] = el.value;
+      Game.saveOptions();
+      if (key === 'skipTutorial') Tutorial.setSkip(el.checked);
+    };
+  });
+  document.getElementById('opt-tutorial').onclick = () => { Tutorial.reset(); UI.toast('Tutorial reset', '#00f0ff'); };
+  document.getElementById('opt-reset').onclick = () => {
+    if (prompt('Type RESET to wipe all data') === 'RESET'){
+      Storage.clear(); location.reload();
+    }
+  };
+  document.getElementById('opt-back').onclick = showTitle;
 }
 
 function showStats(){
@@ -191,9 +301,13 @@ function applyUpgradesToPlayer(){
 let scoreBoostActive = false, scoreBoostUntil = 0;
 
 function onPlayerDeath(cause){
+  // Practice mode: respawn at last checkpoint, no scoring penalty
+  if (Practice.enabled && Practice.checkpoints.length){
+    if (Practice.restore()){ UI.toast('Checkpoint restore', '#00f0ff'); return; }
+  }
   if (Game.runMode === 'level' && LevelPlayer.active){
     if (LevelPlayer.practice){
-      // practice: just respawn at start of run for now (Phase 8 adds checkpoints)
+      if (Practice.checkpoints.length && Practice.restore()){ return; }
       LevelPlayer.deaths = 0;
       Game.player.alive = true; Game.player.invuln = 90;
       Game.player.y = Game.h * 0.82 - Game.player.h - 80;
@@ -435,8 +549,11 @@ function tick(dt){
     else if (ev === 'teleport') { runStats.teleports++; runStats.jumps++; }
     else if (typeof ev === 'object' && ev.type === 'modeChange'){
       runStats.modesVisited.add(ev.mode);
+      Tutorial.briefMode(ev.mode);
     }
   }
+  // Practice mode checkpoints
+  Practice.tick();
   // Player landed = reset orb chain
   const onGround = Game.player.gravityDir > 0
     ? (Game.player.y + Game.player.h >= Game.player.groundY - 0.5)
@@ -564,9 +681,24 @@ function bindInputs(){
     if (code === 'ArrowDown' || code === 'KeyS') downPressedFrame = true;
   });
   onInput('pause', () => {
-    if (Game.state === State.PLAYING){ Game.setState(State.PAUSE); UI.showScreen('pause', `<h1>PAUSED</h1><div class="row"><button class="btn" id="btn-resume">RESUME</button><button class="btn alt" id="btn-quit">QUIT</button></div>`); document.getElementById('btn-resume').onclick = () => { UI.clear(); Game.setState(State.PLAYING); }; document.getElementById('btn-quit').onclick = () => showTitle(); }
+    if (Game.state === State.PLAYING){
+      Game.setState(State.PAUSE);
+      UI.showScreen('pause', `<h1>PAUSED</h1>
+        <div class="row">
+          <button class="btn" id="btn-resume">RESUME</button>
+          <button class="btn alt" id="btn-practice">${Practice.enabled?'EXIT PRACTICE':'PRACTICE MODE'}</button>
+          <button class="btn" id="btn-quit">QUIT</button>
+        </div>
+        <p class="muted">P toggle practice · C checkpoint · X remove last</p>`);
+      document.getElementById('btn-resume').onclick = () => { UI.clear(); Game.setState(State.PLAYING); };
+      document.getElementById('btn-practice').onclick = () => { Practice.toggle(); UI.clear(); Game.setState(State.PLAYING); UI.toast(Practice.enabled?'PRACTICE ON':'PRACTICE OFF','#00f0ff'); };
+      document.getElementById('btn-quit').onclick = () => { Practice.disable(); showTitle(); };
+    }
     else if (Game.state === State.PAUSE){ UI.clear(); Game.setState(State.PLAYING); }
   });
+  onInput('practice', () => { if (Game.state===State.PLAYING){ Practice.toggle(); UI.toast(Practice.enabled?'PRACTICE ON':'PRACTICE OFF','#00f0ff'); } });
+  onInput('checkpoint', () => { if (Practice.enabled){ Practice.add(); UI.toast('Checkpoint set','#39ff14'); } });
+  onInput('unCheckpoint', () => { if (Practice.enabled){ Practice.removeLast(); UI.toast('Checkpoint removed','#ff3344'); } });
   onInput('restart', () => { if (Game.state === State.PLAYING || Game.state === State.DEAD) startRun({ mode:'endless' }); });
   onInput('keydown', ({code}) => {
     if (Game.state === State.TITLE || Game.state === State.MODE_SELECT) konamiCheck(code);
@@ -587,6 +719,7 @@ window.addEventListener('load', () => {
   Daily.load();
   Economy.load();
   Levels.load();
+  Tutorial.load();
   Shop.syncAchievementSkins();
   // Sync Economy currency into Game for HUD compatibility
   Game.totalCoins = Economy.coins;
