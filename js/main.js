@@ -28,6 +28,9 @@ import { ACHIEVEMENTS } from './achievements.js';
 import { SKINS, TRAILS } from './economy.js';
 import { Audio } from './audio.js';
 
+// Haptic helper
+function haptic(ms){ if ('vibrate' in navigator) try{ navigator.vibrate(ms); }catch(_){} }
+
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
 
@@ -82,12 +85,32 @@ function showTitle(){
 
 const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','KeyB','KeyA'];
 const konamiBuffer = [];
-function konamiCheck(code){
+const cheatBuffer = [];
+function konamiCheck(code, key){
   konamiBuffer.push(code);
   if (konamiBuffer.length > KONAMI.length) konamiBuffer.shift();
   if (konamiBuffer.length === KONAMI.length && konamiBuffer.every((c,i)=>c===KONAMI[i])){
     Achievements.check('konami');
+    UI.toast('🌈 RAINBOW DINO UNLOCKED!', '#b300ff');
+    Economy.skinsOwned.add('rainbowDino'); Economy.save();
     konamiBuffer.length = 0;
+  }
+  // Cheat text buffer
+  if (key && key.length === 1){
+    cheatBuffer.push(key.toLowerCase());
+    if (cheatBuffer.length > 12) cheatBuffer.shift();
+    const word = cheatBuffer.join('');
+    if (word.endsWith('rubrub')){
+      Game.options.showFps = !Game.options.showFps;
+      Game.options.showHitboxes = !Game.options.showHitboxes;
+      Game.saveOptions();
+      UI.toast('🔧 DEBUG OVERLAY '+(Game.options.showFps?'ON':'OFF'), '#39ff14');
+      cheatBuffer.length = 0;
+    }
+    if (word.endsWith('dawn')){
+      Economy.addCoins(5000); UI.toast('🌅 +5000c (dev cheat)', '#ffd700');
+      cheatBuffer.length = 0;
+    }
   }
 }
 
@@ -478,6 +501,7 @@ const runtimeCb = {
     Audio.sfx('portal');
     Game.doShake(3, 3);
     Game.doHitstop(60);
+    haptic(50);
     Particles.ring(p.x + p.w/2, Game.player.y + Game.player.h/2, 20, '#00f0ff');
     if (p.type === 'mode'){
       runStats.portals++;
@@ -488,13 +512,14 @@ const runtimeCb = {
     Achievements.check('speedScale', runStats.maxSpeedScale);
     Achievements.check('portalsInRun', runStats.modesVisited);
   },
-  onOrb(){ Game.beatPulse = 0.6; runStats.orbs++; runStats.orbChain++; Audio.sfx('orb'); Achievements.check('orbChain', runStats.orbChain); },
-  onPad(){ Game.beatPulse = 0.4; runStats.pads++; Audio.sfx('pad'); },
+  onOrb(){ Game.beatPulse = 0.6; runStats.orbs++; runStats.orbChain++; Audio.sfx('orb'); haptic(20); Achievements.check('orbChain', runStats.orbChain); },
+  onPad(){ Game.beatPulse = 0.4; runStats.pads++; Audio.sfx('pad'); haptic(20); },
   onCoin(kind, val, combo){
     const b = Economy.bonuses();
     const boosted = Math.ceil(val * (1 + b.coinValue));
     Game.coins += boosted;
     runStats.coins += boosted;
+    haptic(15);
     Particles.floatText(Game.player.x + Game.player.w/2, Game.player.y, `+${boosted}`, kind==='gold'?'#ffaa00':kind==='blue'?'#00f0ff':'#ffd700');
     if (combo >= 3 && combo % 3 === 0){
       Particles.floatText(Game.player.x + Game.player.w/2, Game.player.y - 20, `PERFECT! ×${combo}`, '#ff2dd4');
@@ -568,6 +593,17 @@ function tick(dt){
   }
   // Music BPM tracks speed: 100 → 160 as speed 6 → 14
   Audio.setBpm(100 + ((Game.speed - 6) / 8) * 60);
+  // Secret: every 50,000 score → 5-second 10x multiplier window
+  const scoreMilestone = Math.floor(Game.score / 50000);
+  if (scoreMilestone > (Game._lastMilestone||0)){
+    Game._lastMilestone = scoreMilestone;
+    Game._megaUntil = performance.now() + 5000;
+    UI.toast('💥 10x MULTIPLIER ZONE! 5s!', '#ff2dd4');
+    Game.beatPulse = 1;
+  }
+  if (Game._megaUntil && performance.now() < Game._megaUntil){
+    Game.score += Game.speed * 0.9; // big bonus
+  }
   // Practice mode checkpoints
   Practice.tick();
   // Player landed = reset orb chain
@@ -604,7 +640,7 @@ function tick(dt){
   Coins.tick(ss, Game.player, magnetActive ? { radius:150 + b.magnetRadius } : null, runtimeCb);
   PowerUps.tick(ss, Game.player, runtimeCb, { magnet: b.magnetDur, slowmo: b.slowDur, shield: b.shieldDur/60 });
   Obstacles.tick(ss, Game.player, {
-    die: (o) => { Audio.sfx('death'); Audio.duck(1); Game.doShake(12, 8); Game.doHitstop(80); onPlayerDeath(o.type); },
+    die: (o) => { Audio.sfx('death'); Audio.duck(1); Game.doShake(12, 8); Game.doHitstop(80); haptic(100); onPlayerDeath(o.type); },
     shield: () => { Audio.sfx('shieldBreak'); Game.doShake(4, 5); Achievements.check('shieldSurvive'); }
   });
 
@@ -752,7 +788,7 @@ function bindInputs(){
   onInput('unCheckpoint', () => { if (Practice.enabled){ Practice.removeLast(); UI.toast('Checkpoint removed','#ff3344'); } });
   onInput('restart', () => { if (Game.state === State.PLAYING || Game.state === State.DEAD) startRun({ mode:'endless' }); });
   onInput('keydown', ({code}) => {
-    if (Game.state === State.TITLE || Game.state === State.MODE_SELECT) konamiCheck(code);
+    if (Game.state === State.TITLE || Game.state === State.MODE_SELECT || Game.state === State.OPTIONS) konamiCheck(code, code.startsWith('Key') ? code.slice(3) : '');
     if (!Game.player) return;
     if (modeChangeCooldown > 0) return;
     const map = { Digit1:'cube', Digit2:'ship', Digit3:'ball', Digit4:'spider', Digit5:'wave' };
