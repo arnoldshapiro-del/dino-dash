@@ -11,8 +11,13 @@ import { Coins } from './coins.js';
 import { Particles } from './particles.js';
 import { Obstacles } from './obstacles.js';
 import { ChunkGen } from './chunkgen.js';
+import { Achievements } from './achievements.js';
+import { Missions, MISSION_POOL } from './missions.js';
+import { Daily } from './daily.js';
+import { Stats, newRunStats } from './stats.js';
 
 const TARGET_W = 1280, TARGET_H = 720;
+let runStats = newRunStats();
 
 function resize(){
   const canvas = Game.canvas;
@@ -35,6 +40,10 @@ function resize(){
 function showTitle(){
   Game.setState(State.TITLE);
   UI.hideHud();
+  const daily = Daily.current;
+  const dailyHtml = daily
+    ? `<p class="muted">📅 Daily: ${daily.desc} ${Daily.claimed?'✓':''} · resets in ${Daily.countdown()}</p>`
+    : '';
   UI.showScreen('title', `
     <h1>DINO DASH</h1>
     <p>Endless runner + Geometry Dash + 10 classic games. Tap, hold, swap modes, beat 16 levels, build a shop empire.</p>
@@ -42,96 +51,212 @@ function showTitle(){
       <button class="btn" id="btn-play">▶ PLAY</button>
       <button class="btn alt" id="btn-shop">🛒 SHOP</button>
       <button class="btn" id="btn-collection">🏆 COLLECTION</button>
+      <button class="btn" id="btn-stats">📊 STATS</button>
       <button class="btn" id="btn-options">⚙️ OPTIONS</button>
-      <button class="btn" id="btn-how">📖 HOW TO PLAY</button>
     </div>
     <p class="muted">Best: ${Game.best}  ·  Coins: ${Game.totalCoins}  ·  DP: ${Game.dashPoints}</p>
+    ${dailyHtml}
   `);
   document.getElementById('btn-play').onclick = () => startRun({ mode:'endless' });
   document.getElementById('btn-shop').onclick = () => UI.toast('Shop opens in Phase 5', '#b300ff');
   document.getElementById('btn-collection').onclick = () => UI.toast('Collection opens in Phase 8');
+  document.getElementById('btn-stats').onclick = () => showStats();
   document.getElementById('btn-options').onclick = () => UI.toast('Options opens in Phase 8');
-  document.getElementById('btn-how').onclick = () => UI.toast('Controls: SPACE / TAP = action, DOWN = crouch, ESC = pause');
+
+  // Konami detector
+  konamiBuffer.length = 0;
+}
+
+const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','KeyB','KeyA'];
+const konamiBuffer = [];
+function konamiCheck(code){
+  konamiBuffer.push(code);
+  if (konamiBuffer.length > KONAMI.length) konamiBuffer.shift();
+  if (konamiBuffer.length === KONAMI.length && konamiBuffer.every((c,i)=>c===KONAMI[i])){
+    Achievements.check('konami');
+    konamiBuffer.length = 0;
+  }
+}
+
+function showStats(){
+  Game.setState(State.STATS);
+  const s = Stats.load();
+  const ach = Achievements.unlocked.size;
+  UI.showScreen('stats', `
+    <h1>STATS</h1>
+    <div class="grid" style="grid-template-columns:1fr 1fr;max-width:720px">
+      <div class="card"><div class="name">Total runs</div><div class="cost">${s.runs}</div></div>
+      <div class="card"><div class="name">Total distance</div><div class="cost">${s.distance}</div></div>
+      <div class="card"><div class="name">Total coins</div><div class="cost">${s.coins}</div></div>
+      <div class="card"><div class="name">Total jumps</div><div class="cost">${s.jumps}</div></div>
+      <div class="card"><div class="name">Time played</div><div class="cost">${Math.floor(s.timeS/60)} min</div></div>
+      <div class="card"><div class="name">Best score</div><div class="cost">${s.bestOverall}</div></div>
+      <div class="card"><div class="name">Highest combo</div><div class="cost">${s.maxCombo}</div></div>
+      <div class="card"><div class="name">Achievements</div><div class="cost">${ach}/20</div></div>
+      <div class="card"><div class="name">Levels</div><div class="cost">${s.levelsCompleted}/16</div></div>
+      <div class="card"><div class="name">Stars</div><div class="cost">${s.totalStars}/48</div></div>
+      <div class="card"><div class="name">Teleports</div><div class="cost">${s.teleports}</div></div>
+      <div class="card"><div class="name">Secret coins</div><div class="cost">${s.secretCoins}</div></div>
+    </div>
+    <button class="btn alt" id="btn-back">BACK</button>
+  `);
+  document.getElementById('btn-back').onclick = showTitle;
 }
 
 function startRun(opts){
   Game.resetRun(opts);
   Portals.clear(); Orbs.clear(); Pads.clear(); PowerUps.clear(); Coins.clear(); Particles.clear(); Obstacles.clear();
   ChunkGen.init(Game.player, Game.h * 0.82, () => Game.score);
+  runStats = newRunStats();
   Game.setState(State.PLAYING);
   UI.clear();
 }
 
-function showDead(){
+function endRun(cause){
   Game.setState(State.DEAD);
-  if (Game.score > Game.best){ Game.best = Math.floor(Game.score); Storage.set('best', Game.best); }
+  runStats.score = Game.score;
+  runStats.coins = Game.coins;
+  runStats.timeS = (performance.now() - Game.runStartT)/1000;
+  runStats.distance = Game.scroll;
+  runStats.deathCause = cause || 'unknown';
   Game.totalCoins += Game.coins;
   Storage.set('totalCoins', Game.totalCoins);
+  Stats.applyRun(runStats);
+  // Check achievements
+  Achievements.check('score', runStats.score, Stats.data);
+  Achievements.check('runDuration', runStats.timeS, Stats.data);
+  Achievements.check('combo', runStats.maxCombo, Stats.data);
+  Achievements.check('cactiJumped', null, Stats.data);
+  Achievements.check('coins', null, Stats.data);
+  Achievements.check('teleports', null, Stats.data);
+  Achievements.check('runs', null, Stats.data);
+  Achievements.check('miniTime', runStats.modeTimes.cube && (runStats.powerDurations.mini||0));
+  Achievements.check('waveTime', runStats.modeTimes.wave);
+  Achievements.check('noCrouchDistance', runStats.noCrouchDistance);
+  Achievements.check('portalsInRun', runStats.modesVisited);
+  Achievements.check('firstRun');
+  // Missions + daily
+  Missions.evaluate(runStats, (def) => {
+    if (def.reward) Game.totalCoins += def.reward;
+    if (def.dp) { Game.dashPoints += def.dp; Storage.set('dashPoints', Game.dashPoints); }
+    Stats.bump('missionsCompleted');
+  });
+  if (Daily.current){
+    const dailyDone = Missions._isComplete(Daily.current.id, runStats);
+    if (dailyDone && !Daily.claimed){
+      const r = Daily.claim();
+      if (r){ Game.totalCoins += r.coins; Game.dashPoints += r.dp; Storage.set('totalCoins', Game.totalCoins); Storage.set('dashPoints', Game.dashPoints); Stats.bump('dailiesCompleted'); UI.toast(`🎯 Daily complete! +${r.coins}c +${r.dp}DP`, '#ffe600'); }
+    }
+  }
+  if (Game.score > Game.best){ Game.best = Math.floor(Game.score); Storage.set('best', Game.best); }
   UI.hideHud();
   UI.showScreen('dead', `
     <h1 style="color:#ff3344;-webkit-text-fill-color:#ff3344;background:none">YOU CRASHED</h1>
     <h2>Score ${Math.floor(Game.score)}</h2>
-    <p>Coins ${Game.coins} · Best ${Game.best}</p>
+    <p>Coins ${Game.coins} · Best ${Game.best} · ${Math.floor(runStats.timeS)}s · Modes ${runStats.modesVisited.size}/5</p>
+    <p class="muted">Jumps ${runStats.jumps} · Portals ${runStats.portals} · Orbs ${runStats.orbs} · Max combo ×${runStats.maxCombo}</p>
     <div class="row">
       <button class="btn" id="btn-retry">RETRY</button>
       <button class="btn alt" id="btn-menu">MENU</button>
+      <button class="btn" id="btn-share">SHARE</button>
     </div>
   `);
   document.getElementById('btn-retry').onclick = () => startRun({ mode:'endless' });
   document.getElementById('btn-menu').onclick = () => showTitle();
+  document.getElementById('btn-share').onclick = () => {
+    const t = `I scored ${Math.floor(Game.score)} in Dino Dash! ${location.href}`;
+    if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => UI.toast('Copied to clipboard!', '#00f0ff'));
+  };
 }
 
 let pressedThisFrame = false;
 let modeChangeCooldown = 0;
 
 const runtimeCb = {
-  onPortal(p){ Game.beatPulse = 1; },
-  onOrb(){ Game.beatPulse = 0.6; },
-  onPad(){ Game.beatPulse = 0.4; },
-  onCoin(kind, val, combo){
-    const baseVal = val;
-    Game.coins += baseVal;
-    if (kind === 'gold') Game.score += 100;
-    Game.score += baseVal * 5;
+  onPortal(p){
+    Game.beatPulse = 1;
+    if (p.type === 'mode'){
+      runStats.portals++;
+      runStats.modesVisited.add(p.value);
+    }
+    if (p.type === 'speed') runStats.maxSpeedScale = Math.max(runStats.maxSpeedScale, p.value);
+    Achievements.check('speedScale', runStats.maxSpeedScale);
+    Achievements.check('portalsInRun', runStats.modesVisited);
   },
-  onPickup(kind){ /* hooks for Phase 4 */ },
-  onMystery(kind){ UI.toast('Mystery: ' + kind, '#ff2dd4'); },
-  onCoinBonus(n){ Game.coins += n; },
+  onOrb(){ Game.beatPulse = 0.6; runStats.orbs++; runStats.orbChain++; Achievements.check('orbChain', runStats.orbChain); },
+  onPad(){ Game.beatPulse = 0.4; runStats.pads++; },
+  onCoin(kind, val, combo){
+    Game.coins += val;
+    runStats.coins += val;
+    runStats.maxCombo = Math.max(runStats.maxCombo, combo);
+    if (kind === 'gold'){
+      runStats.secretCoins++;
+      Game.score += 100;
+      Achievements.check('goldCoin');
+    }
+    Game.score += val * 5;
+    Achievements.check('combo', combo);
+  },
+  onPickup(kind){
+    runStats.totalPowerUps++;
+    runStats.uniquePowerUps.add(kind);
+    runStats.powerCounts[kind] = (runStats.powerCounts[kind]||0) + 1;
+    if (kind === 'shield') runStats.shieldsUsed++;
+  },
+  onMystery(kind){ UI.toast('Mystery: ' + kind.replace('mystery_',''), '#ff2dd4'); },
+  onCoinBonus(n){ Game.coins += n; runStats.coins += n; },
   onScoreBonus(n){ Game.score += n; },
   onDpBonus(n){ Game.dashPoints += n; Storage.set('dashPoints', Game.dashPoints); }
 };
 
 function tick(dt){
   if (Game.state !== State.PLAYING) return;
-  // Speed ramp 6 → 14 over 60s; apply player.speedScale from speed portals
   const elapsedS = (performance.now() - Game.runStartT) / 1000;
   const baseSpeed = Math.min(Game.maxSpeed, Game.baseSpeed + (elapsedS / 60) * (Game.maxSpeed - Game.baseSpeed));
   Game.speed = baseSpeed * (Game.player?.speedScale || 1);
 
-  // Slow-mo
   const slow = PowerUps.isActive('slowmo') ? 0.5 : 1;
   Game.scroll += Game.speed * slow;
-  Game.bgScrollX += Game.speed * slow;
   Parallax.scroll(Game.speed * slow);
   Game.score += Game.speed * 0.1 * slow * (PowerUps.isActive('multi2x') ? 2 : 1);
   Game.beatPulse = Math.max(0, Game.beatPulse - 0.05);
 
-  // Input snapshot
   const input = {
     actionHeld: Input.isHeld(),
     crouchHeld: Input.isCrouched(),
     actionPressed: pressedThisFrame
   };
-  // Player tick
+  // Snapshot player.events post-tick to update stats
   Game.player.tick(dt * slow, input);
+  for (const ev of Game.player.events){
+    if (ev === 'jump') runStats.jumps++;
+    else if (ev === 'gravFlip') runStats.gravFlips++;
+    else if (ev === 'teleport') { runStats.teleports++; runStats.jumps++; }
+    else if (typeof ev === 'object' && ev.type === 'modeChange'){
+      runStats.modesVisited.add(ev.mode);
+    }
+  }
+  // Player landed = reset orb chain
+  const onGround = Game.player.gravityDir > 0
+    ? (Game.player.y + Game.player.h >= Game.player.groundY - 0.5)
+    : (Game.player.y <= Game.player.ceilingY + 0.5);
+  if (onGround) runStats.orbChain = 0;
 
-  // Jetpack overrides: pin to upper half
+  // Track per-mode time
+  runStats.modeTimes[Game.player.mode] = (runStats.modeTimes[Game.player.mode]||0) + 1;
+  if (Game.player.mode === 'cube') runStats.cubeOnlyScore += Game.speed * 0.1 * slow;
+  if (input.crouchHeld) runStats.crouchedDistance += Game.speed * slow;
+  else runStats.noCrouchDistance += Game.speed * slow;
+  // Power durations
+  for (const k of Object.keys(PowerUps.active)){
+    runStats.powerDurations[k] = (runStats.powerDurations[k]||0) + 1;
+  }
+
   if (PowerUps.isActive('jetpack')){
     Game.player.y = Math.max(Game.player.ceilingY + 20, Math.min(Game.h*0.4, Game.player.y - 6));
     Game.player.vy = 0;
   }
 
-  // Tick world entities
   const ss = Game.speed * slow;
   ChunkGen.tick(ss);
   Portals.tick(ss, Game.player, runtimeCb);
@@ -140,7 +265,10 @@ function tick(dt){
   const magnetActive = PowerUps.isActive('magnet');
   Coins.tick(ss, Game.player, magnetActive ? { radius:150 } : null, runtimeCb);
   PowerUps.tick(ss, Game.player, runtimeCb, {});
-  Obstacles.tick(ss, Game.player, { die: (o) => showDead(), shield: () => UI.toast('SHIELD BROKE!','#00f0ff') });
+  Obstacles.tick(ss, Game.player, {
+    die: (o) => endRun(o.type),
+    shield: () => { Achievements.check('shieldSurvive'); }
+  });
 
   Particles.tick();
   pressedThisFrame = false;
@@ -151,14 +279,12 @@ function render(){
   ctx.clearRect(0,0, Game.w, Game.h);
   Parallax.draw(ctx, Game.w, Game.h, Game.beatPulse);
   if (Game.state === State.PLAYING || Game.state === State.PAUSE || Game.state === State.DEAD){
-    // ground line
     ctx.strokeStyle = 'rgba(0,240,255,.55)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, Game.h*0.82);
     ctx.lineTo(Game.w, Game.h*0.82);
     ctx.stroke();
-    // entities
     Obstacles.draw(ctx);
     Portals.draw(ctx);
     Pads.draw(ctx);
@@ -167,7 +293,6 @@ function render(){
     Orbs.draw(ctx);
     if (Game.player) Game.player.draw(ctx);
     Particles.draw(ctx);
-    // Power-up HUD ring
     PowerUps.drawHud(ctx, Game.w);
     drawHud();
   }
@@ -203,8 +328,8 @@ function bindInputs(){
     else if (Game.state === State.PAUSE){ UI.clear(); Game.setState(State.PLAYING); }
   });
   onInput('restart', () => { if (Game.state === State.PLAYING || Game.state === State.DEAD) startRun({ mode:'endless' }); });
-  // Dev: 1-5 to swap mode manually
   onInput('keydown', ({code}) => {
+    if (Game.state === State.TITLE || Game.state === State.MODE_SELECT) konamiCheck(code);
     if (!Game.player) return;
     if (modeChangeCooldown > 0) return;
     const map = { Digit1:'cube', Digit2:'ship', Digit3:'ball', Digit4:'spider', Digit5:'wave' };
@@ -216,6 +341,10 @@ window.addEventListener('load', () => {
   Game.canvas = document.getElementById('game');
   Game.ctx = Game.canvas.getContext('2d');
   Game.load();
+  Stats.load();
+  Achievements.load();
+  Missions.load();
+  Daily.load();
   resize();
   window.addEventListener('resize', resize);
   bindInputs();
@@ -232,7 +361,7 @@ window.addEventListener('load', () => {
 
 setInterval(() => {
   if (Game.state === State.PLAYING && Game.player){
-    if (Game.player.y > Game.h + 200 || Game.player.y < -200) showDead();
+    if (Game.player.y > Game.h + 200 || Game.player.y < -200) endRun('outOfBounds');
     if (modeChangeCooldown > 0) modeChangeCooldown--;
   }
 }, 16);
