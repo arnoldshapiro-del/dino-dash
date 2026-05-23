@@ -26,6 +26,7 @@ import { Practice } from './practice.js';
 import { Tutorial } from './tutorial.js';
 import { ACHIEVEMENTS } from './achievements.js';
 import { SKINS, TRAILS } from './economy.js';
+import { Audio } from './audio.js';
 
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
@@ -446,7 +447,7 @@ function endRun(cause){
       if (r){ Game.totalCoins += r.coins; Game.dashPoints += r.dp; Storage.set('totalCoins', Game.totalCoins); Storage.set('dashPoints', Game.dashPoints); Stats.bump('dailiesCompleted'); UI.toast(`🎯 Daily complete! +${r.coins}c +${r.dp}DP`, '#ffe600'); }
     }
   }
-  if (Game.score > Game.best){ Game.best = Math.floor(Game.score); Storage.set('best', Game.best); }
+  if (Game.score > Game.best){ Game.best = Math.floor(Game.score); Storage.set('best', Game.best); Audio.sfx('highscore'); }
   UI.hideHud();
   UI.showScreen('dead', `
     <h1 style="color:#ff3344;-webkit-text-fill-color:#ff3344;background:none">YOU CRASHED</h1>
@@ -474,16 +475,18 @@ let modeChangeCooldown = 0;
 const runtimeCb = {
   onPortal(p){
     Game.beatPulse = 1;
+    Audio.sfx('portal');
     if (p.type === 'mode'){
       runStats.portals++;
       runStats.modesVisited.add(p.value);
+      Audio.setMode(p.value);
     }
     if (p.type === 'speed') runStats.maxSpeedScale = Math.max(runStats.maxSpeedScale, p.value);
     Achievements.check('speedScale', runStats.maxSpeedScale);
     Achievements.check('portalsInRun', runStats.modesVisited);
   },
-  onOrb(){ Game.beatPulse = 0.6; runStats.orbs++; runStats.orbChain++; Achievements.check('orbChain', runStats.orbChain); },
-  onPad(){ Game.beatPulse = 0.4; runStats.pads++; },
+  onOrb(){ Game.beatPulse = 0.6; runStats.orbs++; runStats.orbChain++; Audio.sfx('orb'); Achievements.check('orbChain', runStats.orbChain); },
+  onPad(){ Game.beatPulse = 0.4; runStats.pads++; Audio.sfx('pad'); },
   onCoin(kind, val, combo){
     const b = Economy.bonuses();
     const boosted = Math.ceil(val * (1 + b.coinValue));
@@ -497,6 +500,7 @@ const runtimeCb = {
       Achievements.check('goldCoin');
     }
     Game.score += boosted * 5;
+    Audio.sfx('coin', { combo });
     Achievements.check('combo', combo);
   },
   onPickup(kind){
@@ -504,6 +508,7 @@ const runtimeCb = {
     runStats.uniquePowerUps.add(kind);
     runStats.powerCounts[kind] = (runStats.powerCounts[kind]||0) + 1;
     if (kind === 'shield') runStats.shieldsUsed++;
+    Audio.sfx('powerup');
   },
   onMystery(kind){ UI.toast('Mystery: ' + kind.replace('mystery_',''), '#ff2dd4'); },
   onCoinBonus(n){ Game.coins += n; runStats.coins += n; },
@@ -544,14 +549,17 @@ function tick(dt){
     // Update mode visuals + size only — physics handled in Special.tick
   }
   for (const ev of Game.player.events){
-    if (ev === 'jump') runStats.jumps++;
+    if (ev === 'jump'){ runStats.jumps++; Audio.sfx('jump'); }
     else if (ev === 'gravFlip') runStats.gravFlips++;
-    else if (ev === 'teleport') { runStats.teleports++; runStats.jumps++; }
+    else if (ev === 'teleport') { runStats.teleports++; runStats.jumps++; Audio.sfx('orb'); }
     else if (typeof ev === 'object' && ev.type === 'modeChange'){
       runStats.modesVisited.add(ev.mode);
       Tutorial.briefMode(ev.mode);
+      Audio.setMode(ev.mode);
     }
   }
+  // Music BPM tracks speed: 100 → 160 as speed 6 → 14
+  Audio.setBpm(100 + ((Game.speed - 6) / 8) * 60);
   // Practice mode checkpoints
   Practice.tick();
   // Player landed = reset orb chain
@@ -588,8 +596,8 @@ function tick(dt){
   Coins.tick(ss, Game.player, magnetActive ? { radius:150 + b.magnetRadius } : null, runtimeCb);
   PowerUps.tick(ss, Game.player, runtimeCb, { magnet: b.magnetDur, slowmo: b.slowDur, shield: b.shieldDur/60 });
   Obstacles.tick(ss, Game.player, {
-    die: (o) => onPlayerDeath(o.type),
-    shield: () => { Achievements.check('shieldSurvive'); }
+    die: (o) => { Audio.sfx('death'); Audio.duck(1); onPlayerDeath(o.type); },
+    shield: () => { Audio.sfx('shieldBreak'); Achievements.check('shieldSurvive'); }
   });
 
   // Special level tick after obstacle tick (Special replaces or augments)
@@ -673,13 +681,15 @@ function loop(now){
 
 function bindInputs(){
   Input.init();
-  onInput('action', () => { pressedThisFrame = true; });
+  onInput('action', () => { Audio.init(); pressedThisFrame = true; });
   onInput('left',  () => { leftPressedFrame = true; });
   onInput('right', () => { rightPressedFrame = true; });
   onInput('keydown', ({code}) => {
+    Audio.init();
     if (code === 'ArrowUp' || code === 'KeyW') upPressedFrame = true;
     if (code === 'ArrowDown' || code === 'KeyS') downPressedFrame = true;
   });
+  onInput('mute', () => { Audio.setEnabled(!Audio.enabled); UI.toast(Audio.enabled?'SOUND ON':'SOUND OFF','#00f0ff'); });
   onInput('pause', () => {
     if (Game.state === State.PLAYING){
       Game.setState(State.PAUSE);

@@ -1,6 +1,7 @@
 // 20 achievements. Each: id, name, desc, check(runStats, lifetime) -> bool, dpReward, skinReward?
 import { Storage } from './storage.js';
 import { UI } from './ui.js';
+import { Audio } from './audio.js';
 
 export const ACHIEVEMENTS = [
   { id:'firstSteps',   name:'First Steps',     desc:'Complete your first run',          dp:50  },
@@ -40,6 +41,7 @@ export const Achievements = {
     const def = ACHIEVEMENTS.find(a=>a.id===id);
     if (def){
       UI.toast(`🏆 ${def.name} — +${def.dp} DP`, '#ffd700');
+      Audio.sfx('achievement');
       onUnlock?.(def);
     }
     return true;

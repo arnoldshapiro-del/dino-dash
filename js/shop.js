@@ -3,6 +3,7 @@ import { Economy, UPGRADES, CONSUMABLES, SKINS, TRAILS } from './economy.js';
 import { Achievements } from './achievements.js';
 import { Storage } from './storage.js';
 import { UI } from './ui.js';
+import { Audio } from './audio.js';
 
 let currentTab = 'upgrades';
 
@@ -62,7 +63,7 @@ export const Shop = {
     }
     body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => {
       const ok = Economy.upgrade(b.dataset.buy);
-      if (ok){ UI.toast('Upgrade purchased!', '#39ff14'); this.render(); }
+      if (ok){ Audio.sfx('purchase'); UI.toast('Upgrade purchased!', '#39ff14'); this.render(); }
       else UI.toast('Insufficient funds', '#ff3344');
     });
   },
@@ -86,7 +87,7 @@ export const Shop = {
     }
     body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => {
       const ok = Economy.buyConsumable(b.dataset.buy);
-      if (ok){ UI.toast('Purchased!', '#39ff14'); this.render(); }
+      if (ok){ Audio.sfx('purchase'); UI.toast('Purchased!', '#39ff14'); this.render(); }
       else UI.toast('Insufficient funds', '#ff3344');
     });
   },
@@ -113,7 +114,7 @@ export const Shop = {
     }
     body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => {
       const ok = Economy.buySkin(b.dataset.buy);
-      if (ok){ UI.toast('Skin unlocked!', '#39ff14'); this.render(); }
+      if (ok){ Audio.sfx('purchase'); UI.toast('Skin unlocked!', '#39ff14'); this.render(); }
       else UI.toast('Insufficient DP', '#ff3344');
     });
     body.querySelectorAll('[data-eq]').forEach(b => b.onclick = () => {
@@ -143,7 +144,7 @@ export const Shop = {
     }
     body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => {
       const ok = Economy.buyTrail(b.dataset.buy);
-      if (ok){ UI.toast('Trail unlocked!', '#39ff14'); this.render(); }
+      if (ok){ Audio.sfx('purchase'); UI.toast('Trail unlocked!', '#39ff14'); this.render(); }
       else UI.toast('Insufficient coins', '#ff3344');
     });
     body.querySelectorAll('[data-eq]').forEach(b => b.onclick = () => {
