@@ -476,6 +476,9 @@ const runtimeCb = {
   onPortal(p){
     Game.beatPulse = 1;
     Audio.sfx('portal');
+    Game.doShake(3, 3);
+    Game.doHitstop(60);
+    Particles.ring(p.x + p.w/2, Game.player.y + Game.player.h/2, 20, '#00f0ff');
     if (p.type === 'mode'){
       runStats.portals++;
       runStats.modesVisited.add(p.value);
@@ -492,6 +495,10 @@ const runtimeCb = {
     const boosted = Math.ceil(val * (1 + b.coinValue));
     Game.coins += boosted;
     runStats.coins += boosted;
+    Particles.floatText(Game.player.x + Game.player.w/2, Game.player.y, `+${boosted}`, kind==='gold'?'#ffaa00':kind==='blue'?'#00f0ff':'#ffd700');
+    if (combo >= 3 && combo % 3 === 0){
+      Particles.floatText(Game.player.x + Game.player.w/2, Game.player.y - 20, `PERFECT! ×${combo}`, '#ff2dd4');
+    }
     if (LevelPlayer.active) LevelPlayer.onCoin();
     runStats.maxCombo = Math.max(runStats.maxCombo, combo);
     if (kind === 'gold'){
@@ -518,6 +525,7 @@ const runtimeCb = {
 
 function tick(dt){
   if (Game.state !== State.PLAYING) return;
+  if (Game.hitstop > 0){ Game.hitstop -= 16; return; }
   const elapsedS = (performance.now() - Game.runStartT) / 1000;
   const baseSpeed = Math.min(Game.maxSpeed, Game.baseSpeed + (elapsedS / 60) * (Game.maxSpeed - Game.baseSpeed));
   Game.speed = baseSpeed * (Game.player?.speedScale || 1);
@@ -596,8 +604,8 @@ function tick(dt){
   Coins.tick(ss, Game.player, magnetActive ? { radius:150 + b.magnetRadius } : null, runtimeCb);
   PowerUps.tick(ss, Game.player, runtimeCb, { magnet: b.magnetDur, slowmo: b.slowDur, shield: b.shieldDur/60 });
   Obstacles.tick(ss, Game.player, {
-    die: (o) => { Audio.sfx('death'); Audio.duck(1); onPlayerDeath(o.type); },
-    shield: () => { Audio.sfx('shieldBreak'); Achievements.check('shieldSurvive'); }
+    die: (o) => { Audio.sfx('death'); Audio.duck(1); Game.doShake(12, 8); Game.doHitstop(80); onPlayerDeath(o.type); },
+    shield: () => { Audio.sfx('shieldBreak'); Game.doShake(4, 5); Achievements.check('shieldSurvive'); }
   });
 
   // Special level tick after obstacle tick (Special replaces or augments)
@@ -628,6 +636,24 @@ function tick(dt){
 function render(){
   const ctx = Game.ctx;
   ctx.clearRect(0,0, Game.w, Game.h);
+  // Day/night cycle every 1500 score in endless
+  if (Game.runMode === 'endless'){
+    Game.dayNightT = Math.min(1, (Game.score % 3000) / 1500);
+    if ((Game.score % 3000) > 1500) Game.dayNightT = 2 - Game.dayNightT;
+    Parallax2.setNightAlpha(Game.dayNightT);
+  } else {
+    Parallax2.setNightAlpha(0);
+  }
+  // Screen shake
+  let shakeX = 0, shakeY = 0;
+  if (Game.shake.time > 0){
+    shakeX = (Math.random()-0.5) * Game.shake.amp;
+    shakeY = (Math.random()-0.5) * Game.shake.amp;
+    Game.shake.time--;
+    if (Game.shake.time <= 0) Game.shake.amp = 0;
+  }
+  ctx.save();
+  ctx.translate(shakeX, shakeY);
   Parallax.draw(ctx, Game.w, Game.h, Game.beatPulse);
   if (Game.state === State.PLAYING || Game.state === State.PAUSE || Game.state === State.DEAD){
     ctx.strokeStyle = 'rgba(0,240,255,.55)';
@@ -655,7 +681,22 @@ function render(){
     PowerUps.drawHud(ctx, Game.w);
     drawHud();
   }
+  ctx.restore();
+  if (Game.options.showFps){
+    fpsCount++;
+    const now = performance.now();
+    if (now - fpsLastT > 1000){ fpsValue = fpsCount; fpsCount = 0; fpsLastT = now; }
+    ctx.fillStyle = '#0f0'; ctx.font = '600 14px Space Mono';
+    ctx.fillText(`${fpsValue} FPS`, 8, Game.h - 8);
+  }
+  if (Game.options.showHitboxes && Game.player){
+    const hb = Game.player.hitbox();
+    ctx.strokeStyle = 'lime'; ctx.lineWidth=1;
+    ctx.strokeRect(hb.x, hb.y, hb.w, hb.h);
+  }
 }
+
+let fpsCount = 0, fpsLastT = performance.now(), fpsValue = 0;
 
 function drawHud(){
   UI.showHud(`

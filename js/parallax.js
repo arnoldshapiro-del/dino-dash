@@ -8,6 +8,19 @@ let palette = ['#0a0420','#2d1b4e','#ff4d8f','#ff8d3c'];
 
 export function setPalette(p){ palette = p; }
 export function getPalette(){ return palette; }
+// Day/night blend: alpha 0..1 over a smooth window
+let nightAlpha = 0;
+export function setNightAlpha(a){ nightAlpha = a; }
+export function getNightAlpha(){ return nightAlpha; }
+function lerpHex(a,b,t){
+  if (!a || !b) return a;
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const r = Math.round(((pa>>16)&0xff)*(1-t) + ((pb>>16)&0xff)*t);
+  const g = Math.round(((pa>>8)&0xff)*(1-t) + ((pb>>8)&0xff)*t);
+  const bl = Math.round((pa&0xff)*(1-t) + (pb&0xff)*t);
+  return '#' + ((r<<16)|(g<<8)|bl).toString(16).padStart(6,'0');
+}
+const NIGHT = ['#020210','#070318','#5a124a','#220a30'];
 
 function initStars(w, h){
   stars = [];
@@ -34,12 +47,16 @@ function initMountains(w){
 export function scroll(dx){ scrollX += dx; }
 
 export function draw(ctx, w, h, beatPulse){
-  // Background gradient
+  // Background gradient with day/night lerp
+  const p0 = lerpHex(palette[0], NIGHT[0], nightAlpha);
+  const p1 = lerpHex(palette[1], NIGHT[1], nightAlpha);
+  const p2 = lerpHex(palette[2], NIGHT[2], nightAlpha);
+  const p3 = lerpHex(palette[3], NIGHT[3], nightAlpha);
   const g = ctx.createLinearGradient(0,0,0,h);
-  g.addColorStop(0, palette[0]);
-  g.addColorStop(0.5, palette[1]);
-  g.addColorStop(0.85, palette[2]);
-  g.addColorStop(1, palette[3]);
+  g.addColorStop(0, p0);
+  g.addColorStop(0.5, p1);
+  g.addColorStop(0.85, p2);
+  g.addColorStop(1, p3);
   ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
 
   if (!stars) initStars(w, h);

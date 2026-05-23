@@ -42,6 +42,9 @@ export const Game = {
   // Beat pulse 0-1 for visuals
   beatPulse: 0,
   bgScrollX: 0,
+  shake: { time:0, amp:0 },
+  hitstop: 0,
+  dayNightT: 0,
 
   // Settings
   options: {
@@ -52,6 +55,13 @@ export const Game = {
   },
 
   setState(s){ this.prevState = this.state; this.state = s; },
+  doShake(time, amp){
+    if (this.options.reducedMotion) return;
+    const scale = this.options.shake || 1;
+    if (time*scale > this.shake.time) this.shake.time = time*scale;
+    if (amp*scale > this.shake.amp) this.shake.amp = amp*scale;
+  },
+  doHitstop(ms){ if (ms > this.hitstop) this.hitstop = ms; },
   load(){
     this.best = Storage.get('best', 0);
     this.totalCoins = Storage.get('totalCoins', 0);
