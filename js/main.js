@@ -17,6 +17,10 @@ import { Daily } from './daily.js';
 import { Stats, newRunStats } from './stats.js';
 import { Economy } from './economy.js';
 import { Shop } from './shop.js';
+import { Levels } from './levels.js';
+import { WorldMap } from './worldmap.js';
+import { LevelPlayer } from './levelplayer.js';
+import * as Parallax2 from './parallax.js';
 
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
@@ -56,10 +60,11 @@ function showTitle(){
       <button class="btn" id="btn-stats">📊 STATS</button>
       <button class="btn" id="btn-options">⚙️ OPTIONS</button>
     </div>
+    <p class="muted">Stars: ${Levels.totalStars()}/48 · Levels: ${Object.keys(Levels.progress).length}/16</p>
     <p class="muted">Best: ${Game.best}  ·  Coins: ${Game.totalCoins}  ·  DP: ${Game.dashPoints}</p>
     ${dailyHtml}
   `);
-  document.getElementById('btn-play').onclick = () => startRun({ mode:'endless' });
+  document.getElementById('btn-play').onclick = () => showModeSelect();
   document.getElementById('btn-shop').onclick = () => Shop.open(showTitle);
   document.getElementById('btn-collection').onclick = () => UI.toast('Collection opens in Phase 8');
   document.getElementById('btn-stats').onclick = () => showStats();
@@ -78,6 +83,26 @@ function konamiCheck(code){
     Achievements.check('konami');
     konamiBuffer.length = 0;
   }
+}
+
+function showModeSelect(){
+  Game.setState(State.MODE_SELECT);
+  UI.showScreen('mode', `
+    <h1>SELECT</h1>
+    <div class="row">
+      <button class="btn" id="m-endless">∞ ENDLESS RUN</button>
+      <button class="btn alt" id="m-levels">🗺️ LEVELS</button>
+      <button class="btn" id="m-back">BACK</button>
+    </div>
+    <p class="muted">Endless: infinite procedural. Levels: 16 themed levels + boss.</p>
+  `);
+  document.getElementById('m-endless').onclick = () => startRun({ mode:'endless' });
+  document.getElementById('m-levels').onclick = () => WorldMap.open(
+    (lvl) => startRun({ mode:'level', levelId: lvl.id }),
+    (lvl) => startRun({ mode:'level', levelId: lvl.id, practice:true }),
+    showTitle
+  );
+  document.getElementById('m-back').onclick = showTitle;
 }
 
 function showStats(){
@@ -108,8 +133,18 @@ function showStats(){
 function startRun(opts){
   Game.resetRun(opts);
   Portals.clear(); Orbs.clear(); Pads.clear(); PowerUps.clear(); Coins.clear(); Particles.clear(); Obstacles.clear();
+  LevelPlayer.reset();
   applyUpgradesToPlayer();
-  ChunkGen.init(Game.player, Game.h * 0.82, () => Game.score);
+  if (opts.mode === 'level'){
+    const lvl = Levels.byId(opts.levelId);
+    if (!lvl){ UI.toast('Level not found'); return showTitle(); }
+    if (lvl.palette) Parallax2.setPalette(lvl.palette);
+    Game.player.setMode(lvl.modes[0]);
+    LevelPlayer.init(lvl, Game.player, Game.h * 0.82, !!opts.practice);
+  } else {
+    Parallax2.setPalette(['#0a0420','#2d1b4e','#ff4d8f','#ff8d3c']);
+    ChunkGen.init(Game.player, Game.h * 0.82, () => Game.score);
+  }
   runStats = newRunStats();
 
   // Consumable: head start
@@ -153,6 +188,98 @@ function applyUpgradesToPlayer(){
 }
 
 let scoreBoostActive = false, scoreBoostUntil = 0;
+
+function onPlayerDeath(cause){
+  if (Game.runMode === 'level' && LevelPlayer.active){
+    if (LevelPlayer.practice){
+      // practice: just respawn at start of run for now (Phase 8 adds checkpoints)
+      LevelPlayer.deaths = 0;
+      Game.player.alive = true; Game.player.invuln = 90;
+      Game.player.y = Game.h * 0.82 - Game.player.h - 80;
+      Game.player.vy = 0;
+      return;
+    }
+    LevelPlayer.deaths++;
+    if (LevelPlayer.deaths > 5){
+      endLevelFailed();
+    } else {
+      Game.player.alive = true; Game.player.invuln = 90;
+      Game.player.y = Game.h * 0.82 - Game.player.h - 80;
+      Game.player.vy = 0;
+      UI.toast(`Death ${LevelPlayer.deaths}/5`, '#ff3344');
+    }
+    return;
+  }
+  endRun(cause);
+}
+
+function endLevel(result){
+  Game.setState(State.LEVEL_COMPLETE);
+  const lvl = LevelPlayer.level;
+  const stars = result.stars;
+  const dpReward = (lvl.rewards?.dp || [50,100,200])[stars-1] || 50;
+  const isFirst = Levels.stars(lvl.id) === 0;
+  const coinReward = isFirst ? (lvl.rewards?.firstClearCoins || 500) : 25;
+  Levels.recordStars(lvl.id, stars);
+  Economy.addCoins(coinReward);
+  Economy.addDP(dpReward);
+  Game.totalCoins = Economy.coins;
+  Game.dashPoints = Economy.dp;
+  if (Levels.worldCompleted(3) && !Economy.ownsSkin('glitch')){
+    Economy.skinsOwned.add('glitch'); Economy.save();
+    UI.toast('Skin unlocked: Glitch', '#ffd700');
+  }
+  // Stats
+  Stats.bump('levelsCompleted', isFirst ? 1 : 0);
+  Stats.bump('totalStars', Math.max(0, stars - (Levels.progress[lvl.id]?.starsPrev || 0)));
+  UI.hideHud();
+  const starHtml = '★'.repeat(stars) + '<span style="color:#444">' + '★'.repeat(3-stars) + '</span>';
+  UI.showScreen('lvlComplete', `
+    <h1 style="color:#39ff14;-webkit-text-fill-color:#39ff14;background:none">LEVEL COMPLETE</h1>
+    <div style="font:800 60px Oxanium;color:#ffd700;text-shadow:0 0 22px rgba(255,215,0,.6)">${starHtml}</div>
+    <p>${lvl.name} · Deaths ${result.deaths} · Coins ${result.coins}/${result.coinsAvailable||'-'}</p>
+    <p style="color:#ffd700">+${coinReward} coins  ·  +${dpReward} DP</p>
+    <div class="row">
+      <button class="btn" id="b-next">NEXT</button>
+      <button class="btn alt" id="b-retry">RETRY</button>
+      <button class="btn" id="b-map">WORLD MAP</button>
+    </div>
+  `);
+  document.getElementById('b-retry').onclick = () => startRun({ mode:'level', levelId: lvl.id });
+  document.getElementById('b-map').onclick = () => WorldMap.open(
+    (l) => startRun({ mode:'level', levelId: l.id }),
+    (l) => startRun({ mode:'level', levelId: l.id, practice:true }),
+    showTitle
+  );
+  document.getElementById('b-next').onclick = () => {
+    const next = Levels.all[Levels.all.findIndex(l=>l.id===lvl.id) + 1];
+    if (next && Levels.isUnlocked(next.id)) startRun({ mode:'level', levelId: next.id });
+    else WorldMap.open((l) => startRun({ mode:'level', levelId: l.id }), (l) => startRun({ mode:'level', levelId: l.id, practice:true }), showTitle);
+  };
+}
+
+function endLevelFailed(){
+  Game.setState(State.LEVEL_FAILED);
+  const lvl = LevelPlayer.level;
+  const progressPct = Math.min(100, Math.floor(((Game.scroll) / (LevelPlayer.endX - 1000)) * 100));
+  UI.hideHud();
+  UI.showScreen('lvlFailed', `
+    <h1 style="color:#ff3344;-webkit-text-fill-color:#ff3344;background:none">YOU CRASHED</h1>
+    <p>${progressPct}% of ${lvl.name} · ${LevelPlayer.deaths} deaths</p>
+    <div class="row">
+      <button class="btn" id="b-retry">RETRY</button>
+      <button class="btn alt" id="b-prac">PRACTICE</button>
+      <button class="btn" id="b-map">WORLD MAP</button>
+    </div>
+  `);
+  document.getElementById('b-retry').onclick = () => startRun({ mode:'level', levelId: lvl.id });
+  document.getElementById('b-prac').onclick = () => startRun({ mode:'level', levelId: lvl.id, practice:true });
+  document.getElementById('b-map').onclick = () => WorldMap.open(
+    (l) => startRun({ mode:'level', levelId: l.id }),
+    (l) => startRun({ mode:'level', levelId: l.id, practice:true }),
+    showTitle
+  );
+}
 
 function endRun(cause){
   // Try revive: free if reviveFreq upgrade is due, or consumable
@@ -246,6 +373,7 @@ const runtimeCb = {
     const boosted = Math.ceil(val * (1 + b.coinValue));
     Game.coins += boosted;
     runStats.coins += boosted;
+    if (LevelPlayer.active) LevelPlayer.onCoin();
     runStats.maxCombo = Math.max(runStats.maxCombo, combo);
     if (kind === 'gold'){
       runStats.secretCoins++;
@@ -321,7 +449,11 @@ function tick(dt){
   }
 
   const ss = Game.speed * slow;
-  ChunkGen.tick(ss);
+  if (Game.runMode === 'endless') ChunkGen.tick(ss);
+  if (Game.runMode === 'level' && LevelPlayer.active){
+    const result = LevelPlayer.checkEnd(Game.player.x, Game.scroll);
+    if (result){ endLevel(result); return; }
+  }
   Portals.tick(ss, Game.player, runtimeCb);
   Pads.tick(ss, Game.player, runtimeCb);
   Orbs.tick(ss, Game.player, input, runtimeCb);
@@ -329,7 +461,7 @@ function tick(dt){
   Coins.tick(ss, Game.player, magnetActive ? { radius:150 + b.magnetRadius } : null, runtimeCb);
   PowerUps.tick(ss, Game.player, runtimeCb, { magnet: b.magnetDur, slowmo: b.slowDur, shield: b.shieldDur/60 });
   Obstacles.tick(ss, Game.player, {
-    die: (o) => endRun(o.type),
+    die: (o) => onPlayerDeath(o.type),
     shield: () => { Achievements.check('shieldSurvive'); }
   });
 
@@ -409,6 +541,7 @@ window.addEventListener('load', () => {
   Missions.load();
   Daily.load();
   Economy.load();
+  Levels.load();
   Shop.syncAchievementSkins();
   // Sync Economy currency into Game for HUD compatibility
   Game.totalCoins = Economy.coins;
