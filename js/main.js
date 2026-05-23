@@ -21,6 +21,7 @@ import { Levels } from './levels.js';
 import { WorldMap } from './worldmap.js';
 import { LevelPlayer } from './levelplayer.js';
 import * as Parallax2 from './parallax.js';
+import { Special } from './speciallevels.js';
 
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
@@ -353,6 +354,7 @@ function endRun(cause){
 }
 
 let pressedThisFrame = false;
+let leftPressedFrame = false, rightPressedFrame = false, upPressedFrame = false, downPressedFrame = false;
 let modeChangeCooldown = 0;
 
 const runtimeCb = {
@@ -418,7 +420,15 @@ function tick(dt){
     actionPressed: pressedThisFrame
   };
   // Snapshot player.events post-tick to update stats
-  Game.player.tick(dt * slow, input);
+  // Provide actionPressed flag to player physics (needed for ball, spider, dash orb)
+  Game.player._actionPressed = pressedThisFrame;
+  // Special level mechanics override standard player physics
+  const useSpecial = LevelPlayer.active && Special.active;
+  if (!useSpecial){
+    Game.player.tick(dt * slow, input);
+  } else {
+    // Update mode visuals + size only — physics handled in Special.tick
+  }
   for (const ev of Game.player.events){
     if (ev === 'jump') runStats.jumps++;
     else if (ev === 'gravFlip') runStats.gravFlips++;
@@ -465,8 +475,29 @@ function tick(dt){
     shield: () => { Achievements.check('shieldSurvive'); }
   });
 
+  // Special level tick after obstacle tick (Special replaces or augments)
+  if (useSpecial){
+    const onGround = Game.player.gravityDir > 0
+      ? (Game.player.y + Game.player.h >= Game.player.groundY - 0.5)
+      : (Game.player.y <= Game.player.ceilingY + 0.5);
+    const inputs = {
+      actionPressed: pressedThisFrame, actionHeld: input.actionHeld,
+      crouchHeld: input.crouchHeld, jumping: !onGround,
+      leftPressed: leftPressedFrame, rightPressed: rightPressedFrame,
+      upPressed: upPressedFrame, downPressed: downPressedFrame
+    };
+    if (Special.active === 'flappy') Special.tickFlappy(Game.player, ss, onPlayerDeath);
+    else if (Special.active === 'tunnel') Special.tickTunnel(Game.player, ss, onPlayerDeath, inputs);
+    else if (Special.active === 'jetpack') Special.tickJetpack(Game.player, ss, onPlayerDeath);
+    else if (Special.active === 'pacman') Special.tickPacman(Game.player, ss, onPlayerDeath);
+    else if (Special.active === 'crossy') Special.tickCrossy(Game.player, ss, onPlayerDeath);
+    else if (Special.active === 'tron') Special.tickTron(Game.player, ss, onPlayerDeath, inputs);
+    else if (Special.active === 'boss') Special.tickBoss(Game.player, ss, onPlayerDeath);
+  }
+
   Particles.tick();
   pressedThisFrame = false;
+  leftPressedFrame = rightPressedFrame = upPressedFrame = downPressedFrame = false;
 }
 
 function render(){
@@ -486,6 +517,14 @@ function render(){
     Coins.draw(ctx);
     PowerUps.draw(ctx);
     Orbs.draw(ctx);
+    // Special level overlays
+    if (Special.active === 'flappy') Special.drawFlappy(ctx);
+    else if (Special.active === 'tunnel') Special.drawTunnel(ctx);
+    else if (Special.active === 'jetpack') Special.drawJetpack(ctx);
+    else if (Special.active === 'pacman') Special.drawPacman(ctx);
+    else if (Special.active === 'crossy') Special.drawCrossy(ctx);
+    else if (Special.active === 'tron') Special.drawTron(ctx);
+    else if (Special.active === 'boss') Special.drawBoss(ctx);
     if (Game.player) Game.player.draw(ctx);
     Particles.draw(ctx);
     PowerUps.drawHud(ctx, Game.w);
@@ -518,6 +557,12 @@ function loop(now){
 function bindInputs(){
   Input.init();
   onInput('action', () => { pressedThisFrame = true; });
+  onInput('left',  () => { leftPressedFrame = true; });
+  onInput('right', () => { rightPressedFrame = true; });
+  onInput('keydown', ({code}) => {
+    if (code === 'ArrowUp' || code === 'KeyW') upPressedFrame = true;
+    if (code === 'ArrowDown' || code === 'KeyS') downPressedFrame = true;
+  });
   onInput('pause', () => {
     if (Game.state === State.PLAYING){ Game.setState(State.PAUSE); UI.showScreen('pause', `<h1>PAUSED</h1><div class="row"><button class="btn" id="btn-resume">RESUME</button><button class="btn alt" id="btn-quit">QUIT</button></div>`); document.getElementById('btn-resume').onclick = () => { UI.clear(); Game.setState(State.PLAYING); }; document.getElementById('btn-quit').onclick = () => showTitle(); }
     else if (Game.state === State.PAUSE){ UI.clear(); Game.setState(State.PLAYING); }

@@ -6,6 +6,7 @@ import { Portals } from './portals.js';
 import { Orbs, Pads } from './orbs.js';
 import { PowerUps } from './powerups.js';
 import { Particles } from './particles.js';
+import { Special } from './speciallevels.js';
 
 export const LevelPlayer = {
   active: false,
@@ -34,6 +35,38 @@ export const LevelPlayer = {
     const pixelsPerSec = 60 * 6 * level.speed; // approx baseline
     this.endX = this.cursor + pixelsPerSec * level.length;
     this.groundY = groundY;
+    Special.reset();
+    // Special-level dispatch
+    if (level.flappy){ Special.initFlappy(player, groundY, this.endX); return; }
+    if (level.lanes){ Special.initTunnel(player, groundY, this.endX); return; }
+    if (level.pacman){ Special.initPacman(player, groundY, this.endX); return; }
+    if (level.crossy){ Special.initCrossy(player, groundY, this.endX); return; }
+    if (level.tron){ Special.initTron(player, groundY, this.endX); return; }
+    if (level.boss){ Special.initBoss(player, groundY, this.endX); return; }
+    if (level.id === 'L11'){ Special.initJetpack(player, groundY, this.endX); return; }
+    if (level.id === 'L10'){
+      // Helix tower: vertical falling ball — adapt by spawning many short platforms with gaps
+      let yy = 0;
+      while (yy < this.endX){
+        Obstacles.spawn('platform', this.cursor + yy*0.5, { groundY, cy: groundY - 80 - Math.random()*150 });
+        if (Math.random() < 0.4) Obstacles.spawn('spike', this.cursor + yy*0.5 + 30, { groundY });
+        yy += 200;
+      }
+      Coins.spawnLine(this.cursor + 200, groundY - 70, 12);
+      return;
+    }
+    if (level.id === 'L9'){
+      // Pixel platformer — extra platforms
+      let xx = this.cursor;
+      while (xx < this.endX){
+        Obstacles.spawn('platform', xx, { groundY, cy: groundY - 80 - Math.random()*60 });
+        if (Math.random() < 0.5) Obstacles.spawn('shortCactus', xx + 100, { groundY });
+        if (Math.random() < 0.3) Obstacles.spawn('pterodactyl', xx + 60, { groundY, height:'mid' });
+        Coins.spawn({ kind:'yellow', x: xx + 40, y: groundY - 110 });
+        xx += 280 + Math.random()*120;
+      }
+      return;
+    }
     this._build(level, groundY);
   },
 
