@@ -57,42 +57,9 @@ function showTitle(){
 function startRun(opts){
   Game.resetRun(opts);
   Portals.clear(); Orbs.clear(); Pads.clear(); PowerUps.clear(); Coins.clear(); Particles.clear(); Obstacles.clear();
-  seedSandbox();
+  ChunkGen.init(Game.player, Game.h * 0.82, () => Game.score);
   Game.setState(State.PLAYING);
   UI.clear();
-}
-
-// Phase 2 sandbox: spawn portals/orbs/pads/coins/powerups so all systems are visible.
-// Phase 3 will replace this with chunk-driven content.
-function seedSandbox(){
-  const W = Game.w, H = Game.h;
-  const groundY = H * 0.82;
-  // Mode portals every ~2000px
-  const modes = ['ship','ball','spider','wave','cube'];
-  for (let i=0;i<10;i++){
-    Portals.spawn({ type:'mode', value:modes[i % modes.length], x: 1400 + i*2400, y: groundY - 130 });
-    // Coin trail leading in
-    Coins.spawnLine(1100 + i*2400, groundY - 70, 6, 30, i%4===0 ? 'blue' : 'yellow');
-    // power-up every other portal
-    if (i%2===0){
-      const kinds = ['shield','magnet','slowmo','multi2x','jetpack','mystery'];
-      PowerUps.spawn({ kind: kinds[i % kinds.length], x: 1700 + i*2400, y: groundY - 130 });
-    }
-    // orbs in air
-    const orbKinds = ['yellow','red','blue','pink','green','spider','dash'];
-    Orbs.spawn({ kind: orbKinds[i % orbKinds.length], x: 1850 + i*2400, y: groundY - 180 });
-    // pad on ground
-    const padKinds = ['yellow','pink','red','blue','spider'];
-    Pads.spawn({ kind: padKinds[i % padKinds.length], x: 1500 + i*2400, y: groundY - 8 });
-  }
-  // Speed portal at 8000
-  Portals.spawn({ type:'speed', value:2, x: 8000, y: groundY - 130 });
-  Portals.spawn({ type:'speed', value:1, x: 13000, y: groundY - 130 });
-  // Mini portal at 11000
-  Portals.spawn({ type:'mini', value:true, x: 11000, y: groundY - 130 });
-  Portals.spawn({ type:'mini', value:false, x: 15000, y: groundY - 130 });
-  // Secret coin in challenging spot
-  Coins.spawn({ kind:'gold', x: 9000, y: groundY - 220 });
 }
 
 function showDead(){
@@ -166,12 +133,14 @@ function tick(dt){
 
   // Tick world entities
   const ss = Game.speed * slow;
+  ChunkGen.tick(ss);
   Portals.tick(ss, Game.player, runtimeCb);
   Pads.tick(ss, Game.player, runtimeCb);
   Orbs.tick(ss, Game.player, input, runtimeCb);
   const magnetActive = PowerUps.isActive('magnet');
   Coins.tick(ss, Game.player, magnetActive ? { radius:150 } : null, runtimeCb);
   PowerUps.tick(ss, Game.player, runtimeCb, {});
+  Obstacles.tick(ss, Game.player, { die: (o) => showDead(), shield: () => UI.toast('SHIELD BROKE!','#00f0ff') });
 
   Particles.tick();
   pressedThisFrame = false;
@@ -190,6 +159,7 @@ function render(){
     ctx.lineTo(Game.w, Game.h*0.82);
     ctx.stroke();
     // entities
+    Obstacles.draw(ctx);
     Portals.draw(ctx);
     Pads.draw(ctx);
     Coins.draw(ctx);
