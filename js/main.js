@@ -15,6 +15,8 @@ import { Achievements } from './achievements.js';
 import { Missions, MISSION_POOL } from './missions.js';
 import { Daily } from './daily.js';
 import { Stats, newRunStats } from './stats.js';
+import { Economy } from './economy.js';
+import { Shop } from './shop.js';
 
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
@@ -58,7 +60,7 @@ function showTitle(){
     ${dailyHtml}
   `);
   document.getElementById('btn-play').onclick = () => startRun({ mode:'endless' });
-  document.getElementById('btn-shop').onclick = () => UI.toast('Shop opens in Phase 5', '#b300ff');
+  document.getElementById('btn-shop').onclick = () => Shop.open(showTitle);
   document.getElementById('btn-collection').onclick = () => UI.toast('Collection opens in Phase 8');
   document.getElementById('btn-stats').onclick = () => showStats();
   document.getElementById('btn-options').onclick = () => UI.toast('Options opens in Phase 8');
@@ -106,21 +108,75 @@ function showStats(){
 function startRun(opts){
   Game.resetRun(opts);
   Portals.clear(); Orbs.clear(); Pads.clear(); PowerUps.clear(); Coins.clear(); Particles.clear(); Obstacles.clear();
+  applyUpgradesToPlayer();
   ChunkGen.init(Game.player, Game.h * 0.82, () => Game.score);
   runStats = newRunStats();
+
+  // Consumable: head start
+  if (Economy.useConsumable('headStart')){ Game.score = 2000; }
+  // Consumable: power pack — pre-spawn 3 power-ups
+  if (Economy.useConsumable('powerPack')){
+    const kinds = ['shield','magnet','multi2x'];
+    const groundY = Game.h * 0.82;
+    for (let i=0;i<3;i++) PowerUps.spawn({ kind:kinds[i], x: 1200 + i*600, y: groundY - 130 });
+  }
+  // Consumable: mystery charge
+  if (Economy.useConsumable('mysteryCharge')){
+    PowerUps.spawn({ kind:'mystery', x: 1800, y: Game.h*0.82 - 130 });
+  }
+  // Consumable: score boost (sets a flag — handled in tick)
+  scoreBoostActive = Economy.useConsumable('scoreBoost');
+  scoreBoostUntil = scoreBoostActive ? performance.now() + 30000 : 0;
+  // Upgrade: start-of-run shield (free, doesn't consume revive token)
+  const bonuses = Economy.bonuses();
+  if (bonuses.startShield){ Game.player.shield = true; PowerUps.active.shield = 60 * (3 + (bonuses.shieldDur/60||0)); }
+  // Revive logic per-run
+  Economy.runsSinceRevive++;
   Game.setState(State.PLAYING);
   UI.clear();
 }
 
+function applyUpgradesToPlayer(){
+  const b = Economy.bonuses();
+  // Jump power
+  Game.player.jumpPowerMax = 14 * (1 + b.jumpPower);
+  Game.player.jumpPowerMin = 9 * (1 + b.jumpPower);
+  // Skin color
+  const skin = (Economy.currentSkin === 'classic') ? null :
+    (Economy.currentSkin === 'rainbowDino') ? `hsl(${(performance.now()/8)%360}, 100%, 60%)` :
+    ({
+      neonCube:'#39ff14', pixelBird:'#ffe600', glowCat:'#ff2dd4',
+      robotSkull:'#cccccc', crystal:'#a0e7ff', firePhoenix:'#ff5b1f',
+      galaxy:'#b300ff', glitch:'#ff3344'
+    })[Economy.currentSkin] || null;
+  Game.player.skinColor = skin;
+}
+
+let scoreBoostActive = false, scoreBoostUntil = 0;
+
 function endRun(cause){
+  // Try revive: free if reviveFreq upgrade is due, or consumable
+  const b = Economy.bonuses();
+  const freeRevive = b.reviveFreq && Economy.runsSinceRevive >= b.reviveFreq;
+  const haveToken = (Economy.consumables.reviveToken||0) > 0;
+  if (!Game.player._revived && (freeRevive || haveToken)){
+    Game.player._revived = true;
+    if (freeRevive){ Economy.runsSinceRevive = 0; Economy.save(); UI.toast('FREE REVIVE!', '#39ff14'); }
+    else { Economy.useConsumable('reviveToken'); UI.toast('REVIVE TOKEN USED', '#ff3344'); }
+    Game.player.alive = true; Game.player.invuln = 90;
+    Game.player.y = Game.h * 0.82 - Game.player.h - 80;
+    Game.player.vy = 0;
+    Game.beatPulse = 1;
+    return;
+  }
   Game.setState(State.DEAD);
   runStats.score = Game.score;
   runStats.coins = Game.coins;
   runStats.timeS = (performance.now() - Game.runStartT)/1000;
   runStats.distance = Game.scroll;
   runStats.deathCause = cause || 'unknown';
-  Game.totalCoins += Game.coins;
-  Storage.set('totalCoins', Game.totalCoins);
+  Economy.addCoins(Game.coins);
+  Game.totalCoins = Economy.coins;
   Stats.applyRun(runStats);
   // Check achievements
   Achievements.check('score', runStats.score, Stats.data);
@@ -186,15 +242,17 @@ const runtimeCb = {
   onOrb(){ Game.beatPulse = 0.6; runStats.orbs++; runStats.orbChain++; Achievements.check('orbChain', runStats.orbChain); },
   onPad(){ Game.beatPulse = 0.4; runStats.pads++; },
   onCoin(kind, val, combo){
-    Game.coins += val;
-    runStats.coins += val;
+    const b = Economy.bonuses();
+    const boosted = Math.ceil(val * (1 + b.coinValue));
+    Game.coins += boosted;
+    runStats.coins += boosted;
     runStats.maxCombo = Math.max(runStats.maxCombo, combo);
     if (kind === 'gold'){
       runStats.secretCoins++;
       Game.score += 100;
       Achievements.check('goldCoin');
     }
-    Game.score += val * 5;
+    Game.score += boosted * 5;
     Achievements.check('combo', combo);
   },
   onPickup(kind){
@@ -215,10 +273,15 @@ function tick(dt){
   const baseSpeed = Math.min(Game.maxSpeed, Game.baseSpeed + (elapsedS / 60) * (Game.maxSpeed - Game.baseSpeed));
   Game.speed = baseSpeed * (Game.player?.speedScale || 1);
 
+  const b = Economy.bonuses();
   const slow = PowerUps.isActive('slowmo') ? 0.5 : 1;
   Game.scroll += Game.speed * slow;
   Parallax.scroll(Game.speed * slow);
-  Game.score += Game.speed * 0.1 * slow * (PowerUps.isActive('multi2x') ? 2 : 1);
+  let scoreMul = (1 + b.scoreMul);
+  if (PowerUps.isActive('multi2x')) scoreMul *= 2;
+  if (scoreBoostActive && performance.now() < scoreBoostUntil) scoreMul *= 5;
+  else if (scoreBoostActive) scoreBoostActive = false;
+  Game.score += Game.speed * 0.1 * slow * scoreMul;
   Game.beatPulse = Math.max(0, Game.beatPulse - 0.05);
 
   const input = {
@@ -263,8 +326,8 @@ function tick(dt){
   Pads.tick(ss, Game.player, runtimeCb);
   Orbs.tick(ss, Game.player, input, runtimeCb);
   const magnetActive = PowerUps.isActive('magnet');
-  Coins.tick(ss, Game.player, magnetActive ? { radius:150 } : null, runtimeCb);
-  PowerUps.tick(ss, Game.player, runtimeCb, {});
+  Coins.tick(ss, Game.player, magnetActive ? { radius:150 + b.magnetRadius } : null, runtimeCb);
+  PowerUps.tick(ss, Game.player, runtimeCb, { magnet: b.magnetDur, slowmo: b.slowDur, shield: b.shieldDur/60 });
   Obstacles.tick(ss, Game.player, {
     die: (o) => endRun(o.type),
     shield: () => { Achievements.check('shieldSurvive'); }
@@ -345,6 +408,11 @@ window.addEventListener('load', () => {
   Achievements.load();
   Missions.load();
   Daily.load();
+  Economy.load();
+  Shop.syncAchievementSkins();
+  // Sync Economy currency into Game for HUD compatibility
+  Game.totalCoins = Economy.coins;
+  Game.dashPoints = Economy.dp;
   resize();
   window.addEventListener('resize', resize);
   bindInputs();
