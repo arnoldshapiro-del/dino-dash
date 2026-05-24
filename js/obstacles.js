@@ -55,12 +55,28 @@ export const Obstacles = {
   tick(scrollSpeed, player, onDeath){
     this.t += 1;
     // Platform + slope landing: snap player on top of platforms and slopes
+    let sideHitPlatform = null;       // tracked across the loop for side-hit kill
     if (player && player.alive){
       const px = player.x + player.w/2;
       for (const o of this.list){
         if (o.type === 'platform'){
-          if (px > o.x && px < o.x + o.w && player.vy * player.gravityDir >= 0){
-            if (player.gravityDir > 0){
+          if (px > o.x && px < o.x + o.w){
+            // Determine which side of the platform we should land on:
+            // - Cube/ship/wave/spider: TOP only (when falling DOWN)
+            // - Ball with gravityDir=1: TOP only
+            // - Ball with gravityDir=-1: BOTTOM only (lands on underside)
+            const ballFlipped = player.mode === 'ball' && player.gravityDir < 0;
+            if (ballFlipped){
+              const botY = o.y + o.h;
+              const prevTop = player.y - player.vy;
+              const curTop = player.y;
+              if (player.vy <= 0 && prevTop >= botY - 1 && curTop <= botY){
+                player.y = botY;
+                player.vy = 0;
+                player._onPlatform = true;
+                player._platformY = botY + player.h; // for stillOn check
+              }
+            } else if (player.gravityDir > 0 && player.vy >= 0){
               const topY = o.y;
               const prevBottom = player.y + player.h - player.vy;
               const curBottom = player.y + player.h;
@@ -70,6 +86,15 @@ export const Obstacles = {
                 player._onPlatform = true;
                 player._platformY = topY;
               }
+            }
+            // SIDE-HIT detection — player overlaps platform vertically but
+            // didn't land on a valid surface this frame → death (except ball
+            // mode which lands on both top and bottom).
+            const overlapsX = player.x + player.w > o.x + 6 && player.x < o.x + o.w - 6;
+            const overlapsY = player.y + player.h > o.y + 2 && player.y < o.y + o.h - 2;
+            const isLanded = player._onPlatform && Math.abs((player.y + player.h) - (player._platformY||0)) < 4;
+            if (overlapsX && overlapsY && !isLanded && player.mode !== 'ball'){
+              sideHitPlatform = o;
             }
           }
         }
@@ -127,6 +152,20 @@ export const Obstacles = {
           }
         }
         if (!stillOn) player._onPlatform = false;
+      }
+      // If we recorded a side-hit on a platform AND we didn't end up landing
+      // on it cleanly, kill the player. (Ball mode is exempt — they collide
+      // safely on both top and bottom of platforms.)
+      if (sideHitPlatform && !player._onPlatform){
+        if (player.shield){
+          player.shield = false;
+          player.invuln = 60;
+          Particles.emit(player.x + player.w/2, player.y + player.h/2, { count:24, color:'#00f0ff', speed:5, life:30 });
+          onDeath?.shield?.();
+        } else {
+          onDeath?.die?.(sideHitPlatform);
+          return;
+        }
       }
     }
     for (const o of this.list){

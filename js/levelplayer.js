@@ -282,10 +282,11 @@ export const LevelPlayer = {
       return;
     }
 
-    // W1 = tutorial: ONE small obstacle per chunk, generous coin trail.
-    // Chunks are spawned ~1100px apart (set in _build) so this gives
-    // ~1100px between obstacles — well over a full jump arc.
+    // W1 = tutorial: ONE small obstacle per chunk, BUT now with more
+    // entertainment: floating orbs, ceiling-spike clusters (decorative),
+    // varied coin patterns. Each chunk is its own little visual scene.
     if (level.world === 1){
+      const ceilingY = g * 0.098;
       if (cact.length){
         const easy = cact.includes('shortCactus') ? 'shortCactus' : cact[0];
         Obstacles.spawn(easy, x+500, {groundY:g});
@@ -294,8 +295,29 @@ export const LevelPlayer = {
       } else if (spk.length){
         Obstacles.spawn(spk[0], x+500, {groundY:g});
       }
-      // Long coin trail straight through
-      Coins.spawnLine(x+50, g-60, 14, 30, 'yellow');
+      // Varied coin pattern: 33% line, 33% arc over obstacle, 33% zigzag
+      const pat = Math.floor(Math.random()*3);
+      if (pat === 0)      Coins.spawnLine(x+50, g-60, 14, 30, 'yellow');
+      else if (pat === 1) Coins.spawnArc(x+500, g-80, 60, 9, 'yellow');
+      else                Coins.spawnZigzag(x+80, g-90, 12, 32, 25, 'yellow');
+      // Decorative ceiling-spike cluster — high enough that a normal jump
+      // never reaches it, but adds visual interest to the top half
+      if (Math.random() < 0.7){
+        const cx = x + 200 + Math.random()*400;
+        Obstacles.spawn('spikeCeiling', cx, {groundY:g, ceilingY});
+        Obstacles.spawn('spikeCeiling', cx + 30, {groundY:g, ceilingY});
+      }
+      // Floating jump-orb in the air — bonus bounce + collectible
+      if (Math.random() < 0.5){
+        const ok = ['yellow','pink','green'];
+        Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)],
+                     x: x + 700 + Math.random()*100,
+                     y: g - 110 - Math.random()*40 });
+      }
+      // Top-row blue coin trail in the upper half for extra collectibles
+      if (Math.random() < 0.4){
+        Coins.spawnLine(x+150, g - 220, 5, 40, 'blue');
+      }
       return;
     }
     // Decide layout per allowed — spacing 250+ apart so a player tap-jump
@@ -339,6 +361,26 @@ export const LevelPlayer = {
     Coins.spawnLine(x+150, g - 60 - Math.random()*40, 4 + d*2);
     if (Math.random() < 0.4) Coins.spawn({ kind:'blue', x: x+440, y: g - 150 });
     if (Math.random() < 0.08) Coins.spawn({ kind:'gold', x: x+330, y: g - 220 });
+
+    // ── TOP-SIDE additions for every standard level ──
+    // Decorative ceiling-spike cluster (2 spikes) high in the arena
+    const ceilingY2 = g * 0.098;
+    if (Math.random() < 0.55){
+      const cx = x + 150 + Math.random()*500;
+      Obstacles.spawn('spikeCeiling', cx, {groundY:g, ceilingY: ceilingY2});
+      Obstacles.spawn('spikeCeiling', cx + 30, {groundY:g, ceilingY: ceilingY2});
+    }
+    // Floating mid-air jump orb (extra bounce option)
+    if (Math.random() < 0.35){
+      const ok = ['yellow','pink','green'];
+      Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)],
+                   x: x + 350 + Math.random()*200,
+                   y: g - 130 - Math.random()*40 });
+    }
+    // High-altitude blue coin trail for the bold players who jump high
+    if (Math.random() < 0.25){
+      Coins.spawnLine(x+200, g - 200, 4, 36, 'blue');
+    }
   },
 
   // Called on death; level uses its own death policy
