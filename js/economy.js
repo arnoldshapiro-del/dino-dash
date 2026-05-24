@@ -33,6 +33,7 @@ export const CONSUMABLES = [
 
 export const SKINS = [
   { id:'classic',      name:'Classic Dino', desc:'Default skin', cost:0, defaultOwned:true, color:'#00f0ff' },
+  { id:'custom',       name:'Custom Icon',  desc:'Mix your own primary + secondary colors', cost:0, defaultOwned:true, color:'custom' },
   { id:'neonCube',     name:'Neon Cube',    desc:'Earned by Portal Master OR 250 DP', dp:250, achievement:'portalMaster', color:'#39ff14' },
   { id:'pixelBird',    name:'Pixel Bird',   desc:'Earned by Treasure Hunter OR 350 DP', dp:350, achievement:'treasureHunter', color:'#ffe600' },
   { id:'glowCat',      name:'Glow Cat',     desc:'Earned by Score 10K OR 500 DP', dp:500, achievement:'score10k', color:'#ff2dd4' },
@@ -60,6 +61,8 @@ export const Economy = {
   trailsOwned: new Set(['dots','none']),
   currentSkin: 'classic',
   currentTrail: 'dots',
+  customColor: '#00f0ff',          // primary color for 'custom' skin
+  customColor2: '#0a0420',         // secondary (inner detail) color
   practicePassUntil: 0,
   runsSinceRevive: 0,
 
@@ -72,6 +75,8 @@ export const Economy = {
     this.trailsOwned = new Set(Storage.get('trailsOwned', ['dots','none']));
     this.currentSkin = Storage.get('currentSkin', 'classic');
     this.currentTrail = Storage.get('currentTrail', 'dots');
+    this.customColor  = Storage.get('customColor',  '#00f0ff');
+    this.customColor2 = Storage.get('customColor2', '#0a0420');
     this.practicePassUntil = Storage.get('practicePassUntil', 0);
     this.runsSinceRevive = Storage.get('runsSinceRevive', 0);
   },
@@ -84,6 +89,8 @@ export const Economy = {
     Storage.set('trailsOwned', [...this.trailsOwned]);
     Storage.set('currentSkin', this.currentSkin);
     Storage.set('currentTrail', this.currentTrail);
+    Storage.set('customColor', this.customColor);
+    Storage.set('customColor2', this.customColor2);
     Storage.set('practicePassUntil', this.practicePassUntil);
     Storage.set('runsSinceRevive', this.runsSinceRevive);
   },

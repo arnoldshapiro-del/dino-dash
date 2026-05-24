@@ -203,12 +203,17 @@ function showCollection(){
       body = SKINS.map(s => {
         const owned = Economy.ownsSkin(s.id);
         const equipped = Economy.currentSkin === s.id;
-        const swatch = s.color === 'rainbow' ? 'linear-gradient(90deg,red,orange,yellow,green,blue,purple)' : s.color || '#00f0ff';
+        let swatch;
+        if (s.id === 'custom') swatch = `linear-gradient(135deg, ${Economy.customColor}, ${Economy.customColor2})`;
+        else if (s.color === 'rainbow') swatch = 'linear-gradient(90deg,red,orange,yellow,green,blue,purple)';
+        else swatch = s.color || '#00f0ff';
+        const customizeBtn = s.id === 'custom' ? `<button class="btn alt" data-customize="1">🎨 CUSTOMIZE</button>` : '';
         return `<div class="card ${owned?'owned':'locked'}">
           <div class="icon" style="height:30px;background:${swatch};border-radius:4px"></div>
           <div class="name">${s.name}</div>
           <div class="desc">${s.desc}</div>
           ${owned? (equipped?`<button class="btn" disabled style="opacity:.5">EQUIPPED</button>`:`<button class="btn" data-eq="${s.id}">EQUIP</button>`):''}
+          ${customizeBtn}
         </div>`;
       }).join('');
     } else if (tab === 'trails'){
@@ -236,7 +241,113 @@ function showCollection(){
       if (tab === 'skins') Economy.equipSkin(b.dataset.eq); else Economy.equipTrail(b.dataset.eq);
       UI.toast('Equipped!', '#00f0ff'); render();
     });
+    document.querySelectorAll('[data-customize]').forEach(b => b.onclick = () => showCustomizer(() => { showCollection(); }));
     document.getElementById('c-back').onclick = showTitle;
+  };
+  render();
+}
+
+function showCustomizer(onClose){
+  // Live HSL-picker customizer for the 'custom' skin
+  Game.setState(State.COLLECTION);
+  const render = () => {
+    UI.showScreen('cust', `
+      <h1 style="font-size:48px">🎨 CUSTOMIZE</h1>
+      <p>Pick your primary and secondary colors — your dino, ship, ball, spider and wave all use them.</p>
+      <div class="briefing">
+        <canvas id="cust-preview" width="240" height="120" style="background:linear-gradient(180deg,#0a0420,#2d1b4e);border-radius:8px;box-shadow:0 0 18px rgba(0,240,255,.3)"></canvas>
+        <div class="col" style="gap:14px;width:100%">
+          <div class="cust-row">
+            <label>Primary</label>
+            <input type="color" id="cust-c1" value="${Economy.customColor}" style="width:60px;height:34px;border:none;border-radius:6px;background:transparent;cursor:pointer">
+            <span class="cust-hex" id="cust-hex1">${Economy.customColor}</span>
+          </div>
+          <div class="cust-row">
+            <label>Secondary</label>
+            <input type="color" id="cust-c2" value="${Economy.customColor2}" style="width:60px;height:34px;border:none;border-radius:6px;background:transparent;cursor:pointer">
+            <span class="cust-hex" id="cust-hex2">${Economy.customColor2}</span>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <button class="btn alt" id="cust-preset-cyan">CYAN</button>
+            <button class="btn alt" id="cust-preset-pink">PINK</button>
+            <button class="btn alt" id="cust-preset-fire">FIRE</button>
+            <button class="btn alt" id="cust-preset-galaxy">GALAXY</button>
+            <button class="btn alt" id="cust-preset-mint">MINT</button>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn glow-strong" id="cust-equip">✓ EQUIP CUSTOM</button>
+        <button class="btn" id="cust-back">BACK</button>
+      </div>
+    `);
+    const c1 = document.getElementById('cust-c1');
+    const c2 = document.getElementById('cust-c2');
+    const hex1 = document.getElementById('cust-hex1');
+    const hex2 = document.getElementById('cust-hex2');
+    const preview = document.getElementById('cust-preview');
+    const pctx = preview.getContext('2d');
+    function drawPreview(){
+      pctx.clearRect(0, 0, 240, 120);
+      // Draw a small cube + ship + ball + spider + wave preview using current colors
+      const slots = [
+        { x: 25, y: 60, type: 'cube' },
+        { x: 75, y: 60, type: 'ship' },
+        { x: 125, y: 60, type: 'ball' },
+        { x: 175, y: 60, type: 'spider' },
+        { x: 215, y: 60, type: 'wave' }
+      ];
+      const c1v = c1.value, c2v = c2.value;
+      slots.forEach(s => {
+        pctx.save();
+        pctx.translate(s.x, s.y);
+        pctx.shadowColor = c1v; pctx.shadowBlur = 12;
+        pctx.fillStyle = c1v;
+        if (s.type === 'cube'){
+          pctx.fillRect(-12, -12, 24, 24);
+          pctx.fillStyle = c2v; pctx.fillRect(-9, -9, 18, 3);
+        } else if (s.type === 'ship'){
+          pctx.beginPath(); pctx.moveTo(12,0); pctx.lineTo(-12,-10); pctx.lineTo(-8,0); pctx.lineTo(-12,10); pctx.closePath(); pctx.fill();
+        } else if (s.type === 'ball'){
+          pctx.beginPath(); pctx.arc(0,0,11,0,Math.PI*2); pctx.fill();
+          pctx.fillStyle = c2v; pctx.fillRect(-9,-2,18,4);
+        } else if (s.type === 'spider'){
+          pctx.beginPath(); pctx.arc(0,0,7,0,Math.PI*2); pctx.fill();
+          for (let i=0;i<4;i++){
+            const a = (i/4) * Math.PI*2;
+            pctx.beginPath(); pctx.arc(Math.cos(a)*12, Math.sin(a)*12, 2.5, 0, Math.PI*2); pctx.fill();
+          }
+        } else if (s.type === 'wave'){
+          pctx.beginPath(); pctx.moveTo(10,0); pctx.lineTo(-10,-9); pctx.lineTo(-6,0); pctx.lineTo(-10,9); pctx.closePath(); pctx.fill();
+        }
+        pctx.restore();
+        pctx.fillStyle = '#fff'; pctx.font = '600 8px Oxanium'; pctx.textAlign = 'center';
+        pctx.fillText(s.type.toUpperCase(), s.x, s.y + 24);
+      });
+    }
+    drawPreview();
+    const update = () => {
+      hex1.textContent = c1.value.toUpperCase();
+      hex2.textContent = c2.value.toUpperCase();
+      Economy.customColor = c1.value;
+      Economy.customColor2 = c2.value;
+      Economy.save();
+      drawPreview();
+    };
+    c1.oninput = update;
+    c2.oninput = update;
+    const setPreset = (a, b) => { c1.value = a; c2.value = b; update(); };
+    document.getElementById('cust-preset-cyan').onclick = () => setPreset('#00f0ff', '#0a0420');
+    document.getElementById('cust-preset-pink').onclick = () => setPreset('#ff2dd4', '#2d0a40');
+    document.getElementById('cust-preset-fire').onclick = () => setPreset('#ff5b1f', '#330a00');
+    document.getElementById('cust-preset-galaxy').onclick = () => setPreset('#b300ff', '#0a0040');
+    document.getElementById('cust-preset-mint').onclick = () => setPreset('#39ffaa', '#0a3322');
+    document.getElementById('cust-equip').onclick = () => {
+      Economy.equipSkin('custom');
+      UI.toast('Custom icon equipped!', '#00f0ff');
+      if (onClose) onClose();
+    };
+    document.getElementById('cust-back').onclick = () => { if (onClose) onClose(); };
   };
   render();
 }
@@ -315,10 +426,17 @@ function showStats(){
 }
 
 function startRun(opts){
+  // Preserve attempt count + best-pct across instant restarts on same level
+  const prevAttempts = (opts._keepAttempts ? Game._attempts : 0) || 0;
+  const prevBestPct = (opts._keepAttempts ? Game._bestPct : 0) || 0;
+  const prevLevelId = opts._keepAttempts ? Game._restartLevelId : null;
   Game.resetRun(opts);
   Portals.clear(); Orbs.clear(); Pads.clear(); PowerUps.clear(); Coins.clear(); Particles.clear(); Obstacles.clear();
   LevelPlayer.reset();
   applyUpgradesToPlayer();
+  Game._attempts = (opts._keepAttempts && opts.levelId === prevLevelId) ? prevAttempts : 0;
+  Game._bestPct  = (opts._keepAttempts && opts.levelId === prevLevelId) ? prevBestPct : 0;
+  Game._restartLevelId = opts.levelId || null;
   if (opts.mode === 'level'){
     const lvl = Levels.byId(opts.levelId);
     if (!lvl){ UI.toast('Level not found'); return showTitle(); }
@@ -362,6 +480,7 @@ function applyUpgradesToPlayer(){
   Game.player.jumpPowerMin = 11 * (1 + b.jumpPower);
   // Skin color
   const skin = (Economy.currentSkin === 'classic') ? null :
+    (Economy.currentSkin === 'custom') ? (Economy.customColor || '#00f0ff') :
     (Economy.currentSkin === 'rainbowDino') ? `hsl(${(performance.now()/8)%360}, 100%, 60%)` :
     ({
       neonCube:'#39ff14', pixelBird:'#ffe600', glowCat:'#ff2dd4',
@@ -387,15 +506,18 @@ function onPlayerDeath(cause){
       Game.player.vy = 0;
       return;
     }
-    LevelPlayer.deaths++;
-    if (LevelPlayer.deaths > 5){
-      endLevelFailed();
-    } else {
-      Game.player.alive = true; Game.player.invuln = 90;
-      Game.player.y = Game.h * 0.82 - Game.player.h - 80;
-      Game.player.vy = 0;
-      UI.toast(`Death ${LevelPlayer.deaths}/5`, '#ff3344');
-    }
+    // GD-style INSTANT RESTART. Track best % reached and total attempts;
+    // never block the player with a menu. They can quit via ESC pause.
+    const lvl = LevelPlayer.level;
+    const pct = Math.min(99, Math.floor((Game.scroll / LevelPlayer.endX) * 100));
+    if (pct > (Game._bestPct||0)) Game._bestPct = pct;
+    Game._attempts = (Game._attempts||0) + 1;
+    Game.doShake(8, 6);
+    Game.doHitstop(180); // visible flash, then reset
+    setTimeout(() => {
+      if (Game.state !== State.PLAYING) return;
+      startRun({ mode:'level', levelId: lvl.id, _keepAttempts:true });
+    }, 220);
     return;
   }
   endRun(cause);
@@ -655,6 +777,8 @@ function tick(dt){
   }
   // Practice mode checkpoints
   Practice.tick();
+  // First-encounter tutorial arrows (only fires if Tutorial.enabled)
+  Tutorial.tick(Game, Obstacles, Portals, Orbs, Pads, Coins);
   // Player landed = reset orb chain
   const onGround = Game.player.gravityDir > 0
     ? (Game.player.y + Game.player.h >= Game.player.groundY - 0.5)
@@ -784,14 +908,35 @@ function render(){
 let fpsCount = 0, fpsLastT = performance.now(), fpsValue = 0;
 
 function drawHud(){
+  // Level mode: show progress bar + attempt count + best%
+  // Endless: just score/best/coins/DP
+  const isLevel = Game.runMode === 'level' && LevelPlayer.active;
+  const livePct = isLevel ? Math.min(100, Math.floor((Game.scroll / LevelPlayer.endX) * 100)) : 0;
+  const attempts = Game._attempts || 0;
+  const bestPct = Game._bestPct || 0;
+  const levelName = isLevel ? (LevelPlayer.level?.name || '') : '';
+  const progressHtml = isLevel ? `
+    <div class="progress-row">
+      <div class="progress-label">
+        <span>${levelName}</span>
+        <span class="muted-sm">ATTEMPT ${attempts + 1}${bestPct ? ` · BEST ${bestPct}%` : ''}</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" style="width:${livePct}%"></div>
+        <div class="progress-pct">${livePct}%</div>
+      </div>
+    </div>` : '';
   UI.showHud(`
-    <div class="left">
-      <div class="score">${UI.formatNumber(Game.score)}</div>
-      <div class="best">BEST ${UI.formatNumber(Game.best)}</div>
-    </div>
-    <div class="right">
-      <div class="coins">◎ ${Game.coins}${Coins.combo>2?` <span style="color:#fff;font-size:13px">×${Coins.combo}</span>`:''}</div>
-      <div class="dp">◆ ${Game.dashPoints}</div>
+    ${progressHtml}
+    <div class="hud-row">
+      <div class="left">
+        <div class="score">${UI.formatNumber(Game.score)}</div>
+        <div class="best">BEST ${UI.formatNumber(Game.best)}</div>
+      </div>
+      <div class="right">
+        <div class="coins">◎ ${Game.coins}${Coins.combo>2?` <span style="color:#fff;font-size:13px">×${Coins.combo}</span>`:''}</div>
+        <div class="dp">◆ ${Game.dashPoints}</div>
+      </div>
     </div>
   `);
 }
@@ -819,15 +964,31 @@ function bindInputs(){
   onInput('pause', () => {
     if (Game.state === State.PLAYING){
       Game.setState(State.PAUSE);
+      const isLevel = Game.runMode === 'level' && LevelPlayer.active;
+      const mapBtn = isLevel
+        ? `<button class="btn" id="btn-map">🗺️ WORLD MAP</button>`
+        : '';
       UI.showScreen('pause', `<h1>PAUSED</h1>
+        <p class="muted">${isLevel?`${LevelPlayer.level?.name||''} · Attempt ${(Game._attempts||0)+1}${Game._bestPct?` · Best ${Game._bestPct}%`:''}`:''}</p>
         <div class="row">
-          <button class="btn" id="btn-resume">RESUME</button>
-          <button class="btn alt" id="btn-practice">${Practice.enabled?'EXIT PRACTICE':'PRACTICE MODE'}</button>
-          <button class="btn" id="btn-quit">QUIT</button>
+          <button class="btn glow-strong" id="btn-resume">▶ RESUME</button>
+          <button class="btn alt" id="btn-restart">↻ RESTART</button>
+          <button class="btn" id="btn-practice">${Practice.enabled?'EXIT PRACTICE':'PRACTICE MODE'}</button>
+          ${mapBtn}
+          <button class="btn danger" id="btn-quit">QUIT</button>
         </div>
         <p class="muted">P toggle practice · C checkpoint · X remove last</p>`);
       document.getElementById('btn-resume').onclick = () => { UI.clear(); Game.setState(State.PLAYING); };
+      document.getElementById('btn-restart').onclick = () => {
+        if (isLevel) startRun({ mode:'level', levelId: LevelPlayer.level.id, _keepAttempts:true });
+        else startRun({ mode:'endless' });
+      };
       document.getElementById('btn-practice').onclick = () => { Practice.toggle(); UI.clear(); Game.setState(State.PLAYING); UI.toast(Practice.enabled?'PRACTICE ON':'PRACTICE OFF','#00f0ff'); };
+      if (isLevel) document.getElementById('btn-map').onclick = () => WorldMap.open(
+        (l) => startRun({ mode:'level', levelId: l.id }),
+        (l) => startRun({ mode:'level', levelId: l.id, practice:true }),
+        showTitle
+      );
       document.getElementById('btn-quit').onclick = () => { Practice.disable(); showTitle(); };
     }
     else if (Game.state === State.PAUSE){ UI.clear(); Game.setState(State.PLAYING); }
