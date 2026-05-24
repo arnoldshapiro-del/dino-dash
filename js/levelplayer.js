@@ -80,6 +80,14 @@ export const LevelPlayer = {
       return;
     }
 
+    // Wave levels in W2+ → use spike tunnel (GD Blast Processing style)
+    const isWaveOnly = level.modes.length === 1 && level.modes[0] === 'wave';
+    if (isWaveOnly){
+      this._buildWaveTunnel(level, g);
+      this.coinsAvailable = Coins.list.length;
+      return;
+    }
+
     // Wider chunks → less density. Tutorial levels (world 1) get extra spacing.
     const chunkWidth = level.world === 1 ? 1200 : 800;
     const chunks = Math.floor(len / chunkWidth);
@@ -167,6 +175,56 @@ export const LevelPlayer = {
     Obstacles.spawn('platform', x, { groundY: g, cy: py });
     Obstacles.spawn('platform', x + 120, { groundY: g, cy: py });
     Coins.spawn({ kind: 'gold', x: x + 60, y: py - 40 });
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // GD Blast Processing-style wave tunnel.
+  // The safe path is a slow oscillating sine wave through the middle of
+  // the arena. Spikes on the floor and ceiling form jagged "teeth" that
+  // narrow the corridor. Player threads through at 45° sawtooth.
+  // ─────────────────────────────────────────────────────────────────────
+  _buildWaveTunnel(level, g){
+    const ceilingY = g * 0.098;
+    const start = this.cursor;
+    const end = this.endX - 200;
+    const centerY = (g + ceilingY) / 2;
+    // The safe-path centerline snakes up and down sinusoidally
+    const period = 800;
+    const amp = (g - ceilingY) * 0.22;
+    // Half-width of safe band — wave threads through this corridor
+    const safeBand = (g - ceilingY) * 0.42;
+
+    // CLUSTER spikes into saw-tooth walls. Every chunk of ~240px,
+    // spawn 3 adjacent spikes on one side that form a jagged wall.
+    let x = start + 200;
+    while (x < end){
+      const t = (x - start) / period * Math.PI * 2;
+      const pathY = centerY + Math.sin(t) * amp;
+      const topRoom = pathY - safeBand/2 - ceilingY;
+      const botRoom = (g - pathY) - safeBand/2;
+      // Cluster of 3 spikes on the side with more room — they form a
+      // jagged wall protruding into the play area
+      const onTop = topRoom > botRoom;
+      for (let k = 0; k < 3; k++){
+        if (onTop){
+          Obstacles.spawn('spikeCeiling', x + k*30, { groundY: g, ceilingY });
+        } else {
+          Obstacles.spawn('spike', x + k*30, { groundY: g });
+        }
+      }
+      // Coin on the safe-path side (rewards the player who threads right)
+      Coins.spawn({ kind:'yellow', x: x + 50, y: pathY });
+      x += 240 + Math.random()*60;                      // 240-300px between clusters
+    }
+    // Occasional double-tooth pinch (top AND bottom close together)
+    let dx = start + 1000;
+    while (dx < end){
+      Obstacles.spawn('spike', dx, { groundY: g });
+      Obstacles.spawn('spikeCeiling', dx + 80, { groundY: g, ceilingY });
+      dx += 1400;
+    }
+    // Gold finish coin
+    Coins.spawn({ kind:'gold', x: end - 60, y: centerY });
   },
 
   _placeChunk(x, g, allowed, d, level){

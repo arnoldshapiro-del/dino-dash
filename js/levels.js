@@ -31,10 +31,10 @@ export const LEVELS = [
     palette:['#2a1408','#5a2c14','#cc6d2a','#ff8d3c'],
     obstacles:['shortCactus','spike'],
     unlockReq:'L3' },
-  { id:'L5',  world:W1, name:'WAVE RIDER',    theme:'Pure wave intro', modes:['wave'],
-    length:70, speed:0.9,
-    palette:['#1a3a1a','#2c662c','#56cc56','#a0ff60'],
-    obstacles:['laser'],
+  { id:'L5',  world:W1, name:'WAVE RIDER',    theme:'Wave tunnel — gentle intro', modes:['wave'],
+    length:60, speed:0.9,
+    palette:['#0a1d3a','#1a3066','#2d4a99','#3d65cc'],
+    obstacles:['spike','spikeCeiling'],
     unlockReq:'L4' },
 
   // ── WORLD 2: CROSSROADS ──
@@ -85,10 +85,10 @@ export const LEVELS = [
     palette:['#000000','#001a1a','#00ffd5','#ff3344'],
     obstacles:['trail'],
     unlockReq:'L13' },
-  { id:'L15', world:W3, name:'WAVE TUNNEL',   theme:'Wave hell at 4x', modes:['wave'],
-    length:60, speed:4.0,
-    palette:['#000000','#0a0a0a','#ffe600','#fff700'],
-    obstacles:['laser'],
+  { id:'L15', world:W3, name:'WAVE TUNNEL',   theme:'Spike-wall zigzag tunnel — Blast Processing style', modes:['wave'],
+    length:60, speed:2.5,
+    palette:['#0a0420','#1d0a40','#3a0a66','#5e1899'],
+    obstacles:['spike','spikeCeiling'],
     unlockReq:'L14' },
 
   // ── WORLD 4: THE END ──

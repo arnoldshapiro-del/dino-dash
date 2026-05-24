@@ -197,37 +197,79 @@ export const Modes = {
       if (input.actionHeld){ p.y -= step; }
       else { p.y += step; }
       p.vy = 0;
-      // trail
+      // Trail — store many more points so the glowing zigzag is visible
       p.trail.push({ x:p.x + p.w/2, y:p.y + p.h/2 });
-      if (p.trail.length > 80) p.trail.shift();
+      if (p.trail.length > 180) p.trail.shift();
       if (p.y + p.h > p.groundY){ p.y = p.groundY - p.h; }
       if (p.y < p.ceilingY){ p.y = p.ceilingY; }
     },
     draw(ctx, p){
-      // trail
+      const baseColor = p.skinColor || this.color;
+      // Bright glowing trail — TWO layers: thick outer halo + crisp inner core
       if (p.trail.length > 1){
-        ctx.strokeStyle = (p.skinColor || this.color);
-        ctx.lineWidth = 2;
+        // Outer halo (wide, semi-transparent)
+        ctx.save();
+        ctx.strokeStyle = baseColor;
+        ctx.shadowColor = baseColor;
+        ctx.shadowBlur = 24;
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.35;
         ctx.beginPath();
-        for (let i=0;i<p.trail.length;i++){
-          const a = i / p.trail.length;
+        for (let i = 0; i < p.trail.length; i++){
           const pt = p.trail[i];
-          if (i===0) ctx.moveTo(pt.x, pt.y);
+          if (i === 0) ctx.moveTo(pt.x, pt.y);
           else ctx.lineTo(pt.x, pt.y);
         }
-        ctx.globalAlpha = 0.7; ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.stroke();
+        // Crisp inner core
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        for (let i = 0; i < p.trail.length; i++){
+          const pt = p.trail[i];
+          if (i === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.stroke();
+        // Sparkle dots along the trail every ~15 points
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#ffffff';
+        for (let i = 5; i < p.trail.length; i += 15){
+          const pt = p.trail[i];
+          ctx.globalAlpha = (i / p.trail.length) * 0.6;
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.5, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
       }
+      // Yellow paper-plane character (matches GD Blast Processing wave look)
       ctx.save();
       ctx.translate(p.x + p.w/2, p.y + p.h/2);
-      ctx.shadowColor = p.skinColor || this.color; ctx.shadowBlur = 12;
-      ctx.fillStyle = p.skinColor || this.color;
+      // Tilt the plane based on motion direction (up vs down)
+      const tiltDir = p.trail.length >= 2
+        ? Math.sign(p.trail[p.trail.length-1].y - p.trail[p.trail.length-2].y)
+        : 0;
+      ctx.rotate(tiltDir * 0.45); // ±26° based on whether ascending or descending
+      // Strong glow halo
+      ctx.shadowColor = baseColor; ctx.shadowBlur = 22;
+      ctx.fillStyle = baseColor;
       ctx.beginPath();
-      ctx.moveTo(p.w/2, 0);
-      ctx.lineTo(-p.w/2, -p.h/2);
-      ctx.lineTo(-p.w/3, 0);
-      ctx.lineTo(-p.w/2, p.h/2);
+      ctx.moveTo(p.w/2 + 2, 0);
+      ctx.lineTo(-p.w/2, -p.h/2 - 2);
+      ctx.lineTo(-p.w/4, 0);
+      ctx.lineTo(-p.w/2, p.h/2 + 2);
       ctx.closePath();
       ctx.fill();
+      // White outline on top (GD style)
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      // Small cockpit dot
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(2, 0, 1.8, 0, Math.PI*2); ctx.fill();
       ctx.restore();
     }
   }
