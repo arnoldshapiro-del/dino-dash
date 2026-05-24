@@ -25,6 +25,31 @@ const cubeChunks = [
   { w:1200, d:2, build(x,g){ Obstacles.spawn('crusher', x+400, {groundY:g}); Obstacles.spawn('crusher', x+700, {groundY:g}); Coins.spawnLine(x+550, g-50, 4); } },
   { w:1300, d:2, build(x,g){ Obstacles.spawn('rock', x+300, {groundY:g}); Obstacles.spawn('rock', x+600, {groundY:g}); Obstacles.spawn('spike', x+450, {groundY:g}); } },
   { w:1100, d:1, build(x,g){ Obstacles.spawn('spikeWall', x+800, {groundY:g}); Coins.spawnLine(x+200, g-60, 12); } },
+  // ── NEW GD-style chunks: slopes, blocks, slope-jump combos ──
+  { w: 900, d:0, build(x,g){
+    Obstacles.spawn('slopeUp',   x+200, {groundY:g, height:60});
+    Obstacles.spawn('block',     x+380, {groundY:g, cy:g-60, size:40});
+    Coins.spawnArc(x+280, g-90, 30, 6);
+  }},
+  { w:1000, d:1, build(x,g){
+    Obstacles.spawn('slopeUp',   x+150, {groundY:g, height:80});
+    Obstacles.spawn('block',     x+330, {groundY:g, cy:g-80, size:40});
+    Obstacles.spawn('slopeDown', x+450, {groundY:g, height:80});
+    Coins.spawnLine(x+200, g-110, 8);
+  }},
+  { w:1100, d:2, build(x,g){
+    Obstacles.spawn('slopeUp',   x+150, {groundY:g, height:80});
+    Obstacles.spawn('block',     x+330, {groundY:g, cy:g-80, size:40});
+    Obstacles.spawn('tallCactus',x+450, {groundY:g});
+    Obstacles.spawn('slopeDown', x+550, {groundY:g, height:80});
+  }},
+  { w:1000, d:1, build(x,g){
+    // Stair-step blocks (GD-classic)
+    Obstacles.spawn('block', x+200, {groundY:g, cy:g-40, size:40});
+    Obstacles.spawn('block', x+250, {groundY:g, cy:g-80, size:40});
+    Obstacles.spawn('block', x+300, {groundY:g, cy:g-120, size:40});
+    Obstacles.spawn('tallCactus', x+450, {groundY:g});
+  }},
 ];
 
 // Ship chunks (corridors)
@@ -48,17 +73,41 @@ const shipChunks = [
   }}
 ];
 
-// Ball chunks
+// Ball chunks — alternate floor and ceiling spikes to FORCE gravity flips
 const ballChunks = [
-  { w: 900, d:0, build(x,g){ Obstacles.spawn('shortCactus', x+200, {groundY:g}); Obstacles.spawn('rock', x+400, {groundY:g}); Coins.spawnArc(x+300, g-80, 30, 5); } },
-  { w:1000, d:1, build(x,g){ Obstacles.spawn('spike', x+250, {groundY:g}); Obstacles.spawn('spike', x+450, {groundY:g}); Coins.spawnLine(x+150, g-50, 6); } },
-  { w:1100, d:2, build(x,g){ Obstacles.spawn('spike', x+150, {groundY:g}); Obstacles.spawn('spike', x+300, {groundY:g}); Obstacles.spawn('spike', x+450, {groundY:g}); } }
+  { w:1000, d:0, build(x,g){
+    // Easy: spike on floor → flip to ceiling
+    Obstacles.spawn('spike', x+250, {groundY:g});
+    Coins.spawnLine(x+100, g-50, 5);
+  }},
+  { w:1100, d:1, build(x,g){
+    // Floor spike then ceiling spike → flip, flip
+    Obstacles.spawn('spike', x+200, {groundY:g});
+    Obstacles.spawn('spikeCeiling', x+500, {groundY:g, ceilingY: g * 0.098});
+    Coins.spawnLine(x+250, g-80, 5);
+  }},
+  { w:1200, d:2, build(x,g){
+    // Alternating floor/ceiling spikes — must time flips
+    Obstacles.spawn('spike', x+180, {groundY:g});
+    Obstacles.spawn('spikeCeiling', x+360, {groundY:g, ceilingY: g * 0.098});
+    Obstacles.spawn('spike', x+540, {groundY:g});
+    Obstacles.spawn('spikeCeiling', x+720, {groundY:g, ceilingY: g * 0.098});
+  }}
 ];
 
-// Spider chunks
+// Spider chunks — same idea: ceiling spikes force teleports
 const spiderChunks = [
-  { w: 900, d:0, build(x,g){ Obstacles.spawn('spike', x+200, {groundY:g}); Obstacles.spawn('spike', x+400, {groundY:g}); } },
-  { w:1100, d:1, build(x,g){ Obstacles.spawn('spike', x+200, {groundY:g}); Obstacles.spawn('spike', x+420, {groundY:g}); Obstacles.spawn('spike', x+640, {groundY:g}); } }
+  { w:1000, d:0, build(x,g){
+    Obstacles.spawn('spike', x+250, {groundY:g});
+    Obstacles.spawn('spikeCeiling', x+500, {groundY:g, ceilingY: g * 0.098});
+    Coins.spawnLine(x+100, g-30, 4);
+  }},
+  { w:1100, d:1, build(x,g){
+    Obstacles.spawn('spike', x+200, {groundY:g});
+    Obstacles.spawn('spikeCeiling', x+400, {groundY:g, ceilingY: g * 0.098});
+    Obstacles.spawn('spike', x+600, {groundY:g});
+    Obstacles.spawn('spikeCeiling', x+800, {groundY:g, ceilingY: g * 0.098});
+  }}
 ];
 
 // Wave chunks
@@ -135,14 +184,19 @@ export const ChunkGen = {
         Coins.spawn({ kind:'gold', x: this.cursor, y: this.groundY - 220 });
         this.cursor += 120;
       }
-      // Mode portal — placed ON THE GROUND so it's always reachable while running
-      if (Math.random() < 0.18){
+      // Mode portal — placed ON THE GROUND with WALLS above and below the
+      // portal opening. Forces the player to go THROUGH the portal (GD-style).
+      if (Math.random() < 0.20){
         const modes = ['ship','ball','spider','wave'];
         const m = modes[Math.floor(Math.random()*modes.length)];
-        Portals.spawn({ type:'mode', value:m, x: this.cursor, y: this.groundY - 100 });
-        this.cursor += 220;
+        const portalX = this.cursor;
+        const portalY = this.groundY - 100;
+        Portals.spawn({ type:'mode', value:m, x: portalX, y: portalY });
+        // Wall ABOVE the portal opening (from top of canvas down to portal top)
+        Obstacles.spawn('portalWall', portalX + 5, { groundY: this.groundY, cy: 0, height: portalY });
+        this.cursor += 240;
         this.currentMode = m;
-        this.modeChunksRemaining = 2 + Math.floor(Math.random()*3); // 2-4 chunks
+        this.modeChunksRemaining = 2 + Math.floor(Math.random()*3);
       }
       // PAD → PLATFORM → ORB combo: pad on ground catapults you onto a small
       // platform 200px ahead (so it scrolls into position by the time you

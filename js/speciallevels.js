@@ -24,15 +24,17 @@ export const Special = {
     this.active = 'flappy';
     this.state = { pipes: [], gapY: groundY/2, nextPipeX: 800, endX };
     player.setMode('ship');
-    // Heavy gravity ship: amped by overriding tick
     player.flappyMode = true;
-    // Generate pipes
-    let x = 1000;
+    // Spawn player mid-air so they don't instantly hit the floor
+    player.y = groundY * 0.4;
+    player.vy = 0;
+    // Generate pipes with generous gap height + spacing
+    let x = 1200;
     while (x < endX){
-      const gap = 140 + Math.random()*60;
-      const gapCenter = 200 + Math.random()*(Game.h*0.5);
+      const gap = 220 + Math.random()*60;          // 220-280 px gap (was 140-200)
+      const gapCenter = 240 + Math.random()*(Game.h*0.4);
       this.state.pipes.push({ x, gap, gapCenter, passed:false, scored:false });
-      x += 360 + Math.random()*120;
+      x += 520 + Math.random()*160;                // 520-680 px between pipes (was 360-480)
     }
   },
   tickFlappy(player, scrollSpeed, onDeath){
@@ -148,17 +150,24 @@ export const Special = {
       if (player.x + player.w > l.x && player.x < l.x + l.w
         && player.y + player.h > l.y && player.y < l.y + l.h){ onDeath('laser'); return; }
     }
-    // Missiles (homing)
+    // Missiles (slowly-tracking, not perfectly homing — players can dodge by
+    // moving consistently up or down once the warning appears)
     if (--this.state.nextMissileT <= 0){
-      this.state.nextMissileT = 180;
-      this.state.missiles.push({ x: Game.w + 60, y: player.y, warn: 60 });
+      this.state.nextMissileT = 600;                   // every 10s (was 3s)
+      this.state.missiles.push({ x: Game.w + 60, y: player.y, warn: 240, lockY: player.y });
     }
     for (const m of this.state.missiles){
-      if (m.warn > 0){ m.warn--; m.x = Game.w - 80; continue; }
-      const dx = player.x - m.x; const dy = player.y - m.y;
-      const d = Math.sqrt(dx*dx+dy*dy)||1;
-      m.x += (dx/d) * 5;
-      m.y += (dy/d) * 3;
+      if (m.warn > 0){
+        m.warn--;
+        m.x = Game.w - 80;
+        // Keep updating locked y until warning ends, then commit
+        if (m.warn > 30) m.lockY = player.y;
+        continue;
+      }
+      // Straight-line toward locked y (committed, no longer perfectly homing)
+      const dy = m.lockY - m.y;
+      m.x -= 3.5;                                       // slower travel (was variable 5)
+      m.y += Math.sign(dy) * Math.min(1.2, Math.abs(dy)*0.05);
       if (m.x + 20 > player.x && m.x < player.x + player.w
         && m.y + 20 > player.y && m.y < player.y + player.h){ onDeath('missile'); return; }
     }
@@ -297,39 +306,41 @@ export const Special = {
   // ─────────── L14 TRON ───────────
   initTron(player, groundY, endX){
     this.active = 'tron';
-    this.state = { trails:[[]], aiCycles:[
-      { x: Game.w + 200, y: groundY-200, dir:0, trail:[], color:'#ff3344' },
-      { x: Game.w + 400, y: groundY-100, dir:0, trail:[], color:'#39ff14' }
-    ], endX };
+    // Spawn player in the middle of the arena, no AI cycles (was overwhelming)
+    player.x = Game.w / 2 - 8;
+    player.y = Game.h / 2 - 8;
+    this.state = { trails:[[]], aiCycles:[], endX, t:0 };
     player.setMode('cube'); player.gravityDir = 0; player.vy = 0;
     player.tronDir = 0; // 0=right, 1=down, 2=left, 3=up
   },
   tickTron(player, scrollSpeed, onDeath, inputs){
+    this.state.t++;
     const dirs = [[1,0],[0,1],[-1,0],[0,-1]];
-    if (inputs.leftPressed) player.tronDir = 2;
-    if (inputs.rightPressed) player.tronDir = 0;
-    if (inputs.upPressed) player.tronDir = 3;
-    if (inputs.downPressed) player.tronDir = 1;
+    // 180-degree reversal is forbidden (only orthogonal turns)
+    const wantTurn = (newDir) => {
+      const cur = player.tronDir;
+      if ((cur + 2) % 4 === newDir) return; // skip 180s
+      player.tronDir = newDir;
+    };
+    if (inputs.leftPressed) wantTurn(2);
+    if (inputs.rightPressed) wantTurn(0);
+    if (inputs.upPressed) wantTurn(3);
+    if (inputs.downPressed) wantTurn(1);
     const [dx,dy] = dirs[player.tronDir];
-    player.x += dx * 4; player.y += dy * 4;
-    if (player.x < 0 || player.x > Game.w || player.y < 0 || player.y > Game.h){ onDeath('wall'); return; }
-    // Trail
+    const speed = 3;                              // slower (was 4)
+    player.x += dx * speed; player.y += dy * speed;
+    // Slight border margin so AI has buffer
+    if (player.x < 20 || player.x > Game.w - 20 || player.y < 20 || player.y > Game.h - 20){ onDeath('wall'); return; }
     const t = this.state.trails[0];
     t.push({ x: player.x + player.w/2, y: player.y + player.h/2 });
-    if (t.length > 400) t.shift();
-    // Self collide (skip latest 8 segments)
-    for (let i=0;i<t.length-12;i++){
-      if (Math.abs(t[i].x - (player.x+player.w/2)) < 6 && Math.abs(t[i].y - (player.y+player.h/2)) < 6){ onDeath('selfTrail'); return; }
+    if (t.length > 250) t.shift();
+    // Self-collide skip latest 20 (was 12) so tight turns don't kill you
+    for (let i=0;i<t.length-20;i++){
+      if (Math.abs(t[i].x - (player.x+player.w/2)) < 5 && Math.abs(t[i].y - (player.y+player.h/2)) < 5){ onDeath('selfTrail'); return; }
     }
-    // AI cycles
-    for (const ai of this.state.aiCycles){
-      ai.x -= scrollSpeed * 0.5;
-      ai.trail.push({ x: ai.x, y: ai.y });
-      if (ai.trail.length > 200) ai.trail.shift();
-      // Player collides with ai trail
-      for (const seg of ai.trail){
-        if (Math.abs(seg.x - (player.x+player.w/2)) < 6 && Math.abs(seg.y - (player.y+player.h/2)) < 6){ onDeath('aiTrail'); return; }
-      }
+    // Spawn occasional data-fragment coins
+    if (this.state.t % 90 === 0){
+      // (visual only — no coin module hookup here)
     }
   },
   drawTron(ctx){
@@ -361,32 +372,31 @@ export const Special = {
   },
   tickBoss(player, scrollSpeed, onDeath){
     this.state.phaseT++;
-    // Phase 1: stomp shockwaves
+    // Phase 1: stomp shockwaves — slower spawn, slower travel
     if (this.bossPhase === 1){
       if (player.mode !== 'cube') player.setMode('cube');
-      if (this.state.phaseT % 90 === 0){
-        this.state.attacks.push({ kind:'shock', x: Game.w, y: player.groundY-10, vx:-8, life:120 });
+      if (this.state.phaseT % 150 === 0){      // every 2.5s (was 1.5s)
+        this.state.attacks.push({ kind:'shock', x: Game.w, y: player.groundY-10, vx:-5, life:200 });
       }
       if (this.state.phaseT > 60*60){ this.bossPhase = 2; this.state.phaseT = 0; player.setMode('ship'); }
     }
-    // Phase 2: fire breath
+    // Phase 2: fire breath — fewer streams, slower
     else if (this.bossPhase === 2){
       if (player.mode !== 'ship') player.setMode('ship');
-      if (this.state.phaseT % 60 === 0){
+      if (this.state.phaseT % 110 === 0){      // every 1.8s (was 1s)
         const fy = 80 + Math.random()*(Game.h - 200);
-        this.state.attacks.push({ kind:'fire', x: Game.w, y: fy, vx:-9, life:160, h:20 });
+        this.state.attacks.push({ kind:'fire', x: Game.w, y: fy, vx:-6, life:200, h:20 });
       }
       if (this.state.phaseT > 60*90){ this.bossPhase = 3; this.state.phaseT = 0; player.setMode('wave'); }
     }
-    // Phase 3: mixed chaos
+    // Phase 3: shard chaos — manageable cadence
     else if (this.bossPhase === 3){
       if (player.mode !== 'wave') player.setMode('wave');
-      if (this.state.phaseT % 70 === 0){
+      if (this.state.phaseT % 200 === 0){      // every 3.3s (was 1.17s)
         const fy = 100 + Math.random()*(Game.h - 240);
-        this.state.attacks.push({ kind:'shard', x: Game.w, y: fy, vx:-12, life:120 });
+        this.state.attacks.push({ kind:'shard', x: Game.w, y: fy, vx:-6, life:250 });
       }
       if (this.state.phaseT > 60*90){
-        // boss defeated
         this.hp = 0;
       }
     }

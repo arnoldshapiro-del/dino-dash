@@ -76,11 +76,16 @@ export const LevelPlayer = {
     const useObs = (...types) => types.filter(t => allowed.has(t));
     let x = this.cursor;
     const len = (this.endX - this.cursor);
-    const chunks = Math.floor(len / 700);
+    // Wider chunks → less density. Tutorial levels (world 1) get extra spacing.
+    const chunkWidth = level.world === 1 ? 950 : 800;
+    const chunks = Math.floor(len / chunkWidth);
     for (let i=0;i<chunks;i++){
-      const d = (i < chunks*0.3) ? 0 : (i < chunks*0.7 ? 1 : 2);
+      // Difficulty ramp: world 1 stays at d=0 (gentle tutorial). World 2+ uses 0/1/2.
+      let d;
+      if (level.world === 1) d = 0;
+      else d = (i < chunks*0.4) ? 0 : (i < chunks*0.8 ? 1 : 2);
       this._placeChunk(x, g, allowed, d, level);
-      x += 700 + Math.random()*180;
+      x += chunkWidth + Math.random()*180;
     }
     // Coin count
     this.coinsAvailable = Coins.list.length;
@@ -94,19 +99,49 @@ export const LevelPlayer = {
     const spk = pickFrom('spike','pulsingSpike');
     const lazr = pickFrom('laser');
     const haz = pickFrom('sawblade','rock','crusher','electricFence','firepit');
+    const slope = pickFrom('slopeUp','slopeDown','block');
+    // GD-style slope/block chunks (if allowed in this level)
+    if (slope.length && Math.random() < 0.5){
+      const variant = Math.floor(Math.random() * 3);
+      if (variant === 0 && allowed.has('slopeUp')){
+        Obstacles.spawn('slopeUp', x+200, {groundY:g, height:70});
+        if (allowed.has('block')) Obstacles.spawn('block', x+400, {groundY:g, cy:g-70, size:40});
+        if (allowed.has('slopeDown')) Obstacles.spawn('slopeDown', x+500, {groundY:g, height:70});
+      } else if (variant === 1 && allowed.has('block')){
+        // Stair-step
+        Obstacles.spawn('block', x+250, {groundY:g, cy:g-40, size:40});
+        Obstacles.spawn('block', x+300, {groundY:g, cy:g-80, size:40});
+        Obstacles.spawn('block', x+350, {groundY:g, cy:g-120, size:40});
+      } else if (variant === 2 && allowed.has('slopeUp')){
+        Obstacles.spawn('slopeUp', x+200, {groundY:g, height:80});
+        if (cact.length) Obstacles.spawn(cact[0], x+450, {groundY:g});
+      }
+      return;
+    }
 
-    // Decide layout per allowed
+    // Decide layout per allowed — spacing 250+ apart so a player tap-jump
+    // can complete its arc between obstacles.
     if (cact.length){
-      Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+200, {groundY:g});
-      if (d >= 1) Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+380, {groundY:g});
-      if (d >= 2) Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+520, {groundY:g});
+      Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+250, {groundY:g});
+      if (d >= 1) Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+500, {groundY:g});
+      if (d >= 2) Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+730, {groundY:g});
     } else if (lazr.length){
-      Obstacles.spawn('laser', x+200, {groundY:g, cy: g - 120 - Math.random()*200});
-      if (d>=1) Obstacles.spawn('laser', x+420, {groundY:g, cy: g - 200 - Math.random()*200});
+      Obstacles.spawn('laser', x+250, {groundY:g, cy: g - 140 - Math.random()*160});
+      if (d>=1) Obstacles.spawn('laser', x+520, {groundY:g, cy: g - 220 - Math.random()*160});
     } else if (spk.length){
-      Obstacles.spawn(spk[0], x+200, {groundY:g});
-      Obstacles.spawn(spk[0], x+340, {groundY:g});
-      if (d>=2) Obstacles.spawn(spk[0], x+480, {groundY:g});
+      // For ball/spider modes: alternate floor and ceiling spikes so the player
+      // MUST use gravity flip / teleport — can't just hug one surface.
+      const ceilingY = g * 0.098;
+      if (level.modes.includes('ball') || level.modes.includes('spider')){
+        Obstacles.spawn(spk[0], x+250, {groundY:g});
+        Obstacles.spawn('spikeCeiling', x+440, {groundY:g, ceilingY});
+        if (d>=1) Obstacles.spawn(spk[0], x+630, {groundY:g});
+        if (d>=2) Obstacles.spawn('spikeCeiling', x+820, {groundY:g, ceilingY});
+      } else {
+        Obstacles.spawn(spk[0], x+250, {groundY:g});
+        if (d>=1) Obstacles.spawn(spk[0], x+440, {groundY:g});
+        if (d>=2) Obstacles.spawn(spk[0], x+630, {groundY:g});
+      }
     }
     if (haz.length && d >= 1 && Math.random()<0.5){
       Obstacles.spawn(haz[Math.floor(Math.random()*haz.length)], x+560, {groundY:g});

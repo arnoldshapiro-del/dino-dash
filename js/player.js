@@ -9,8 +9,10 @@ export class Player {
     this.vy = 0;
     this.gravityDir = 1;
     this.groundY = 0; this.ceilingY = 0;
-    this.jumpPowerMax = 18;
-    this.jumpPowerMin = 13;
+    // Lower jump power + reduced gravity in cube tick = flatter, more diagonal
+    // arc. Tap clears tall cactus (58px), hold reaches platforms at 200px.
+    this.jumpPowerMax = 15;
+    this.jumpPowerMin = 11;
     this.mode = 'cube';
     this.skinColor = null;
     this.spin = 0; this.spinTarget = 0; this.tilt = 0;

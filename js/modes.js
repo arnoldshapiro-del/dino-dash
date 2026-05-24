@@ -13,7 +13,9 @@ export const Modes = {
   cube: {
     label:'CUBE', color:'#00f0ff',
     tick(p, dt, input){
-      const G = 1.05 * p.gravityDir;
+      // GD-style flatter arc: lower gravity → longer air time, jump LOOKS
+      // diagonal because the world keeps scrolling under the player.
+      const G = 0.85 * p.gravityDir;
       const onSurface = p.gravityDir > 0
         ? (p.y + p.h >= p.groundY - 0.5 || p._onPlatform)
         : (p.y <= p.ceilingY + 0.5);

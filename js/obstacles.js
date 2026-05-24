@@ -40,26 +40,77 @@ export const Obstacles = {
       case 'spikeWall':    o.w=20; o.h=180; o.y = g - 180; o.closeSpeed = 0.3; break;
       case 'electricFence':o.w=18; o.h=90; o.y = g - 90; o.spark=0; break;
       case 'firepit':      o.w=46; o.h=18; o.y=g - o.h; o.flicker=Math.random()*Math.PI*2; break;
+      // GD-style slopes — triangular ramps the player slides up/down on
+      case 'slopeUp':      o.w=80; o.h=o.height||60; o.y=g - o.h; break;   // / shape
+      case 'slopeDown':    o.w=80; o.h=o.height||60; o.y=g - o.h; break;   // \ shape
+      // Solid square block — bump-stop for cube, walkable top
+      case 'block':        o.w=o.size||40; o.h=o.size||40; o.y=o.cy != null ? o.cy : g - o.h; break;
+      // Wall around portal — forces the player through the portal
+      case 'portalWall':   o.w=20; o.h=o.height||120; o.y=o.cy != null ? o.cy : g - o.h; break;
+      // Ceiling spike — for ball/spider modes that flip gravity
+      case 'spikeCeiling': o.w=24; o.h=22; o.y=o.ceilingY!=null ? o.ceilingY : 0; break;
     }
   },
 
   tick(scrollSpeed, player, onDeath){
     this.t += 1;
-    // Platform landing: if falling onto a platform from above, snap player on top
+    // Platform + slope landing: snap player on top of platforms and slopes
     if (player && player.alive){
+      const px = player.x + player.w/2;
       for (const o of this.list){
-        if (o.type !== 'platform') continue;
-        const px = player.x + player.w/2;
-        if (px > o.x && px < o.x + o.w && player.vy * player.gravityDir >= 0){
-          if (player.gravityDir > 0){
-            // Falling down — land on top of platform if crossing its top edge
+        if (o.type === 'platform'){
+          if (px > o.x && px < o.x + o.w && player.vy * player.gravityDir >= 0){
+            if (player.gravityDir > 0){
+              const topY = o.y;
+              const prevBottom = player.y + player.h - player.vy;
+              const curBottom = player.y + player.h;
+              if (prevBottom <= topY + 1 && curBottom >= topY){
+                player.y = topY - player.h;
+                player.vy = 0;
+                player._onPlatform = true;
+                player._platformY = topY;
+              }
+            }
+          }
+        }
+        else if (o.type === 'slopeUp'){
+          // / shape — surface y at given x: top-left to bottom-right line
+          if (px >= o.x && px <= o.x + o.w){
+            const t = (px - o.x) / o.w; // 0..1
+            const surfaceY = o.y + o.h - t * o.h; // bottom-left corner up to top-right
+            // Wait — slopeUp visual: triangle with base on ground, hypotenuse rising left→right.
+            // Top of slope at x=0 is at the BASE (high y). At x=w it's at top (low y).
+            // So surfaceY = o.y + o.h - t * o.h (slopes upward as t increases).
+            if (player.gravityDir > 0 && player.y + player.h >= surfaceY - 4){
+              player.y = surfaceY - player.h;
+              player.vy = Math.min(player.vy, 0);
+              player._onPlatform = true;
+              player._platformY = surfaceY;
+            }
+          }
+        }
+        else if (o.type === 'slopeDown'){
+          // \ shape — high on left, low on right
+          if (px >= o.x && px <= o.x + o.w){
+            const t = (px - o.x) / o.w;
+            const surfaceY = o.y + t * o.h; // top at left, bottom at right
+            if (player.gravityDir > 0 && player.y + player.h >= surfaceY - 4){
+              player.y = surfaceY - player.h;
+              player.vy = Math.min(player.vy, 0);
+              player._onPlatform = true;
+              player._platformY = surfaceY;
+            }
+          }
+        }
+        else if (o.type === 'block'){
+          // Walkable top — land like a platform
+          if (px > o.x && px < o.x + o.w && player.vy * player.gravityDir >= 0 && player.gravityDir > 0){
             const topY = o.y;
             const prevBottom = player.y + player.h - player.vy;
             const curBottom = player.y + player.h;
-            if (prevBottom <= topY + 1 && curBottom >= topY){
+            if (prevBottom <= topY + 2 && curBottom >= topY){
               player.y = topY - player.h;
               player.vy = 0;
-              // Treat this platform as the effective ground for jump
               player._onPlatform = true;
               player._platformY = topY;
             }
@@ -69,10 +120,11 @@ export const Obstacles = {
       // Clear platform-flag if player drifts off
       if (player._onPlatform){
         let stillOn = false;
-        const px = player.x + player.w/2;
         for (const o of this.list){
-          if (o.type !== 'platform') continue;
-          if (px > o.x && px < o.x + o.w && Math.abs((player.y + player.h) - o.y) < 2){ stillOn = true; break; }
+          if (!['platform','slopeUp','slopeDown','block'].includes(o.type)) continue;
+          if (px > o.x && px < o.x + o.w && Math.abs((player.y + player.h) - (player._platformY||o.y)) < 4){
+            stillOn = true; break;
+          }
         }
         if (!stillOn) player._onPlatform = false;
       }
@@ -129,9 +181,17 @@ export const Obstacles = {
 
   _hits(hb, o){
     if (o.type === 'platform') return false; // platforms are walkable
+    if (o.type === 'slopeUp' || o.type === 'slopeDown') return false; // slopes never kill (walkable)
     if (o.type === 'wind') return false; // wind affects ship/wave but not damage
     if (o.type === 'pulsingSpike' && o.h < 10) return false;
-    // basic rect overlap
+    if (o.type === 'block'){
+      // Block kills only if player slams into it from the side (not on top)
+      const playerOnTop = hb.y + hb.h <= o.y + 4;
+      if (playerOnTop) return false;
+      // Side collision only
+      return hb.x < o.x + o.w && hb.x + hb.w > o.x && hb.y < o.y + o.h && hb.y + hb.h > o.y;
+    }
+    // basic rect overlap (covers portalWall, spikeCeiling, all others)
     return hb.x < o.x + o.w && hb.x + hb.w > o.x && hb.y < o.y + o.h && hb.y + hb.h > o.y;
   },
 
@@ -260,6 +320,67 @@ export const Obstacles = {
             ctx.ellipse(o.x + 8 + i*8, o.y + 8 + fy, 4, 8, 0, 0, Math.PI*2);
             ctx.fill();
           }
+          ctx.shadowBlur=0;
+          break;
+        case 'slopeUp':
+          // / shape — bottom-left to top-right
+          ctx.fillStyle = '#00f0ff'; ctx.shadowColor='#00f0ff'; ctx.shadowBlur=8;
+          ctx.beginPath();
+          ctx.moveTo(o.x, o.y + o.h);
+          ctx.lineTo(o.x + o.w, o.y);
+          ctx.lineTo(o.x + o.w, o.y + o.h);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#ffffff80'; ctx.lineWidth=2; ctx.beginPath();
+          ctx.moveTo(o.x, o.y + o.h); ctx.lineTo(o.x + o.w, o.y); ctx.stroke();
+          ctx.shadowBlur=0;
+          break;
+        case 'slopeDown':
+          // \ shape — top-left to bottom-right
+          ctx.fillStyle = '#00f0ff'; ctx.shadowColor='#00f0ff'; ctx.shadowBlur=8;
+          ctx.beginPath();
+          ctx.moveTo(o.x, o.y);
+          ctx.lineTo(o.x + o.w, o.y + o.h);
+          ctx.lineTo(o.x, o.y + o.h);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#ffffff80'; ctx.lineWidth=2; ctx.beginPath();
+          ctx.moveTo(o.x, o.y); ctx.lineTo(o.x + o.w, o.y + o.h); ctx.stroke();
+          ctx.shadowBlur=0;
+          break;
+        case 'block':
+          // GD-style solid block — neon cyan with white outline
+          ctx.fillStyle = '#0a3a6a'; ctx.shadowColor='#00f0ff'; ctx.shadowBlur=10;
+          ctx.fillRect(o.x, o.y, o.w, o.h);
+          ctx.strokeStyle = '#00f0ff'; ctx.lineWidth=2.5;
+          ctx.strokeRect(o.x+1, o.y+1, o.w-2, o.h-2);
+          // Inner cross-detail
+          ctx.strokeStyle = '#00f0ff60'; ctx.lineWidth=1;
+          ctx.beginPath();
+          ctx.moveTo(o.x+o.w/2, o.y+4); ctx.lineTo(o.x+o.w/2, o.y+o.h-4);
+          ctx.moveTo(o.x+4, o.y+o.h/2); ctx.lineTo(o.x+o.w-4, o.y+o.h/2);
+          ctx.stroke();
+          ctx.shadowBlur=0;
+          break;
+        case 'portalWall':
+          // Tall vertical pillar — forces player through portal
+          ctx.fillStyle = '#3a1a52'; ctx.shadowColor='#b300ff'; ctx.shadowBlur=14;
+          ctx.fillRect(o.x, o.y, o.w, o.h);
+          ctx.strokeStyle = '#b300ff'; ctx.lineWidth=2;
+          ctx.strokeRect(o.x+1, o.y+1, o.w-2, o.h-2);
+          // Warning stripes
+          ctx.fillStyle = '#ffe60040';
+          for (let i=0;i<o.h;i+=20){
+            ctx.fillRect(o.x+2, o.y+i, o.w-4, 4);
+          }
+          ctx.shadowBlur=0;
+          break;
+        case 'spikeCeiling':
+          // Inverted triangle hanging from ceiling
+          ctx.fillStyle = COLORS.spike; ctx.shadowColor=COLORS.spike; ctx.shadowBlur=6;
+          ctx.beginPath();
+          ctx.moveTo(o.x, o.y);
+          ctx.lineTo(o.x + o.w, o.y);
+          ctx.lineTo(o.x + o.w/2, o.y + o.h);
+          ctx.closePath(); ctx.fill();
           ctx.shadowBlur=0;
           break;
       }
