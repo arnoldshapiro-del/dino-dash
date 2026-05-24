@@ -38,10 +38,10 @@ export const LEVELS = [
     unlockReq:'L4' },
 
   // ── WORLD 2: CROSSROADS ──
-  { id:'L6',  world:W2, name:'GEOMETRIC BEAT',theme:'Pure Geometry Dash', modes:['cube','ship','spider'],
-    length:120, speed:1.5,
+  { id:'L6',  world:W2, name:'GEOMETRIC BEAT',theme:'Platform hop over the hazard floor — pure GD', modes:['cube'],
+    length:90, speed:1.2,
     palette:['#0a0420','#2d1b4e','#ff4d8f','#ff8d3c'],
-    obstacles:['spike','pulsingSpike','sawblade','tallCactus','laser','slopeUp','slopeDown','block'],
+    obstacles:['spike','shortCactus','tallCactus','sawblade','slopeDown'],
     unlockReq:'L5' },
   { id:'L7',  world:W2, name:'FLAPPY SKIES',  theme:'Flappy Bird (heavy gravity ship)', modes:['ship'],
     length:90, speed:1.0, flappy:true,

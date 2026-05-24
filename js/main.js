@@ -77,8 +77,10 @@ function showTitle(){
     ? `<p class="muted">📅 Daily: ${daily.desc} ${Daily.claimed?'✓':''} · resets in ${Daily.countdown()}</p>`
     : '';
   const cloudHtml = FirebaseSync.user
-    ? `<button class="btn cloud-on" id="btn-cloud">☁️ ${(FirebaseSync.user.displayName||'Signed in').slice(0,16)} — synced</button>`
-    : `<button class="btn cloud-off" id="btn-cloud">☁️ Cloud Save (sign in)</button>`;
+    ? `<button class="btn cloud-on" id="btn-cloud">☁️ ${(FirebaseSync.user.displayName||'Signed in').slice(0,16)} — synced (sign out)</button>
+       <button class="btn danger" id="btn-fresh">🔄 START FRESH</button>`
+    : `<button class="btn cloud-off" id="btn-cloud">☁️ Cloud Save — sign in to sync across devices</button>
+       <button class="btn danger" id="btn-fresh">🔄 START FRESH</button>`;
   UI.showScreen('title', `
     <h1 class="title-shine">DINO DASH</h1>
     <p>Endless runner + Geometry Dash + 10 classic games. Tap, hold, swap modes, beat 16 levels, build a shop empire.</p>
@@ -110,6 +112,19 @@ function showTitle(){
       if (ok) UI.toast('Signed in! Progress now syncs to cloud.', '#39ff14');
       else UI.toast('Sign-in cancelled', '#ff3344');
       showTitle();
+    }
+  };
+  document.getElementById('btn-fresh').onclick = async () => {
+    const status = FirebaseSync.user
+      ? `This will WIPE your save on this device AND in the cloud.\n\nSigned in as: ${FirebaseSync.user.email || FirebaseSync.user.displayName}\n\nType RESET to confirm:`
+      : `This will WIPE all local progress.\n\nType RESET to confirm:`;
+    const answer = prompt(status);
+    if (answer === 'RESET'){
+      await FirebaseSync.resetAll();
+      UI.toast('Progress reset. Reloading…', '#ff3344');
+      setTimeout(() => location.reload(), 800);
+    } else if (answer != null){
+      UI.toast('Cancelled — your progress is safe.', '#39ff14');
     }
   };
 

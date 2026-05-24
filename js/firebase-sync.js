@@ -124,6 +124,23 @@ export const FirebaseSync = {
     } catch(e){
       console.warn('[FirebaseSync] push failed', e);
     }
+  },
+
+  // Wipe BOTH local progress and (if signed in) the cloud copy. Used by
+  // the Start Fresh button.
+  async resetAll(){
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+    if (this.user && db){
+      try {
+        const ref = doc(db, 'dinoDash', this.user.uid);
+        await setDoc(ref, { _updatedAt: serverTimestamp() }, { merge: false });
+      } catch(e){ console.warn('[FirebaseSync] cloud wipe failed', e); }
+    }
   }
 };
 

@@ -6,14 +6,17 @@ import { UI } from './ui.js';
 import { Audio } from './audio.js';
 
 let currentTab = 'upgrades';
+let cachedOnClose = null;   // remember the close callback across re-renders
 
 export const Shop = {
   open(onClose){
     Economy.load();
     Achievements.load();
+    cachedOnClose = onClose;
     this.render(onClose);
   },
   render(onClose){
+    if (onClose) cachedOnClose = onClose;
     const html = `
       <h1>SHOP</h1>
       <div class="row" style="font:700 16px Oxanium">
@@ -30,8 +33,8 @@ export const Shop = {
       <button class="btn alt" id="btn-shop-close">CLOSE</button>
     `;
     UI.showScreen('shop', html);
-    document.querySelectorAll('.tab').forEach(t => t.onclick = () => { currentTab = t.dataset.tab; this.render(onClose); });
-    document.getElementById('btn-shop-close').onclick = () => { onClose?.(); };
+    document.querySelectorAll('.tab').forEach(t => t.onclick = () => { currentTab = t.dataset.tab; this.render(cachedOnClose); });
+    document.getElementById('btn-shop-close').onclick = () => { (cachedOnClose||(()=>{}))(); };
     this.renderTab();
   },
   renderTab(){

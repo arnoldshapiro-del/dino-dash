@@ -55,40 +55,118 @@ export const LevelPlayer = {
       Coins.spawnLine(this.cursor + 200, groundY - 70, 12);
       return;
     }
-    if (level.id === 'L9'){
-      // Pixel platformer — extra platforms, generous spacing
-      let xx = this.cursor;
-      while (xx < this.endX){
-        Obstacles.spawn('platform', xx, { groundY, cy: groundY - 80 - Math.random()*60 });
-        if (Math.random() < 0.4) Obstacles.spawn('shortCactus', xx + 200, { groundY });
-        Coins.spawn({ kind:'yellow', x: xx + 40, y: groundY - 110 });
-        xx += 500 + Math.random()*180;
-      }
-      return;
-    }
+    // L9 PIXEL PLATFORM now uses the auto platform-path builder (cube-only,
+    // world>=2), so we just fall through to _build() which calls it.
     this._build(level, groundY);
   },
 
   _build(level, g){
     // Use the obstacle pool restricted to level.obstacles
     const allowed = new Set(level.obstacles);
-    const useObs = (...types) => types.filter(t => allowed.has(t));
     let x = this.cursor;
     const len = (this.endX - this.cursor);
+
+    // ────────────────────────────────────────────────────────────────────
+    // NEW: PLATFORM-PATH MODE for cube-only levels (W2+).
+    // Generates a connected ribbon of floating platforms across the level
+    // with hazards (cacti, spikes, sawblades) on the GROUND below. Player
+    // hops from platform to platform — falling onto the hazard floor = death.
+    // Pads + orbs sprinkled in to keep momentum.
+    // ────────────────────────────────────────────────────────────────────
+    const isCubeOnly = level.modes.length === 1 && level.modes[0] === 'cube' && level.world >= 2;
+    if (isCubeOnly){
+      this._buildPlatformPath(level, g, allowed);
+      this.coinsAvailable = Coins.list.length;
+      return;
+    }
+
     // Wider chunks → less density. Tutorial levels (world 1) get extra spacing.
     const chunkWidth = level.world === 1 ? 1200 : 800;
     const chunks = Math.floor(len / chunkWidth);
     for (let i=0;i<chunks;i++){
-      // Difficulty ramp: world 1 stays at d=0 (gentle tutorial). World 2+ uses 0/1/2.
       let d;
       if (level.world === 1) d = 0;
       else d = (i < chunks*0.4) ? 0 : (i < chunks*0.8 ? 1 : 2);
       this._placeChunk(x, g, allowed, d, level);
       x += chunkWidth + Math.random()*180;
     }
-    // Coin count
     this.coinsAvailable = Coins.list.length;
-    // Place final "FINISH" marker via mode portal sentinel — handled by endX
+  },
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Build a connected path of floating platforms across the level.
+  // Constraints:
+  //   - Player's jump arc covers ~200px horizontal at apex 132px
+  //   - So next platform must be ≤220px horizontal away, ≤110px above
+  //   - Spawn cacti/spikes on the ground in the gaps between platforms
+  //   - First platform near ground so player can climb on
+  //   - Last platform leads to the finish
+  // ─────────────────────────────────────────────────────────────────────
+  _buildPlatformPath(level, g, allowed){
+    const start = this.cursor;
+    const end = this.endX - 300;
+    // First few "starter" platforms at low height so player can step on
+    // them without jumping. Each is close to the previous so the path
+    // teaches the player the rhythm.
+    Obstacles.spawn('platform', start + 300, { groundY: g, cy: g - 30 });
+    Obstacles.spawn('platform', start + 450, { groundY: g, cy: g - 60 });
+    Coins.spawnLine(start + 320, g - 90, 6, 26, 'yellow');
+    let x = start + 620;
+    let py = g - 80;
+    const minY = g - 200;
+    const maxY = g - 60;
+
+    while (x < end){
+      // Place a platform (the path tile)
+      Obstacles.spawn('platform', x, { groundY: g, cy: py });
+      // Coin floating above each platform
+      Coins.spawn({ kind: Math.random() < 0.2 ? 'blue' : 'yellow', x: x + 55, y: py - 32 });
+
+      // Gap to next platform: 90-160px horizontal (tap-jump territory).
+      // With cube physics, scroll-during-tap-jump ≈ 130-200px so player
+      // naturally arcs onto the next platform with reasonable timing.
+      const gap = 90 + Math.random() * 70;
+      const nextX = x + 110 + gap;       // 110 = platform width
+
+      // Next platform height: vary so the path zig-zags up and down.
+      // Reachable jump: ~120px UP (under max hold-jump of 132), ~80px DOWN
+      // (so the recovery jump from a lower platform doesn't undershoot).
+      let nextY = py + (Math.random()*180 - 100);
+      // Clamp to overall range
+      nextY = Math.max(minY, Math.min(maxY, nextY));
+      // Cap the height delta so each hop is reachable
+      if (py - nextY > 90) nextY = py - 90;       // going UP no more than 90
+      if (nextY - py > 100) nextY = py + 100;     // going DOWN no more than 100
+
+      // In the GAP between platforms (on the ground), place a hazard so
+      // falling = death. Type depends on what the level allows.
+      const hazardX = x + 110 + gap*0.3;
+      if (allowed.has('spike')) Obstacles.spawn('spike', hazardX, { groundY: g });
+      else if (allowed.has('shortCactus')) Obstacles.spawn('shortCactus', hazardX, { groundY: g });
+      else if (allowed.has('tallCactus')) Obstacles.spawn('tallCactus', hazardX, { groundY: g });
+      else if (allowed.has('sawblade')) Obstacles.spawn('sawblade', hazardX, { groundY: g });
+
+      // Occasionally: slope back down to ground for variety + recovery
+      if (Math.random() < 0.12 && allowed.has('slopeDown')){
+        Obstacles.spawn('slopeDown', nextX, { groundY: g, height: 60 });
+      }
+
+      // Occasionally: a pad on the ground between platforms (catapult upward)
+      if (Math.random() < 0.18){
+        Pads.spawn({ kind: 'yellow', x: hazardX + 50, y: g - 8 });
+      }
+      // Occasionally: a jump orb in the air near the platform
+      if (Math.random() < 0.15){
+        const ok = ['yellow','pink','green'];
+        Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)], x: x + 70, y: py - 60 });
+      }
+      x = nextX;
+      py = nextY;
+    }
+    // Long landing platform at the end so finish-line is forgiving
+    Obstacles.spawn('platform', x, { groundY: g, cy: py });
+    Obstacles.spawn('platform', x + 120, { groundY: g, cy: py });
+    Coins.spawn({ kind: 'gold', x: x + 60, y: py - 40 });
   },
 
   _placeChunk(x, g, allowed, d, level){
