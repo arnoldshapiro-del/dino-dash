@@ -309,8 +309,8 @@ function startRun(opts){
 function applyUpgradesToPlayer(){
   const b = Economy.bonuses();
   // Jump power
-  Game.player.jumpPowerMax = 14 * (1 + b.jumpPower);
-  Game.player.jumpPowerMin = 9 * (1 + b.jumpPower);
+  Game.player.jumpPowerMax = 18 * (1 + b.jumpPower);
+  Game.player.jumpPowerMin = 13 * (1 + b.jumpPower);
   // Skin color
   const skin = (Economy.currentSkin === 'classic') ? null :
     (Economy.currentSkin === 'rainbowDino') ? `hsl(${(performance.now()/8)%360}, 100%, 60%)` :

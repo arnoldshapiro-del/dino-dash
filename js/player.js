@@ -9,8 +9,8 @@ export class Player {
     this.vy = 0;
     this.gravityDir = 1;
     this.groundY = 0; this.ceilingY = 0;
-    this.jumpPowerMax = 14;
-    this.jumpPowerMin = 9;
+    this.jumpPowerMax = 18;
+    this.jumpPowerMin = 13;
     this.mode = 'cube';
     this.skinColor = null;
     this.spin = 0; this.spinTarget = 0; this.tilt = 0;

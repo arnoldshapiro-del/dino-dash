@@ -135,22 +135,43 @@ export const ChunkGen = {
         Coins.spawn({ kind:'gold', x: this.cursor, y: this.groundY - 220 });
         this.cursor += 120;
       }
-      // 1 per 800-1500: mode portal
+      // Mode portal — placed ON THE GROUND so it's always reachable while running
       if (Math.random() < 0.18){
         const modes = ['ship','ball','spider','wave'];
         const m = modes[Math.floor(Math.random()*modes.length)];
-        Portals.spawn({ type:'mode', value:m, x: this.cursor, y: this.groundY - 130 });
+        Portals.spawn({ type:'mode', value:m, x: this.cursor, y: this.groundY - 100 });
         this.cursor += 220;
         this.currentMode = m;
         this.modeChunksRemaining = 2 + Math.floor(Math.random()*3); // 2-4 chunks
       }
-      // Orb in air sometimes
-      if (Math.random() < 0.25){
+      // PAD → PLATFORM → ORB combo: pad on ground catapults you onto a small
+      // platform 200px ahead (so it scrolls into position by the time you
+      // reach apex), orb floats just above the platform.
+      // - Yellow pad vy=-22 → apex 230px above ground
+      // - Platform top at groundY-200 → player lands ON it near apex
+      // - Orb at platY-30 → tap mid-air after landing for double-jump effect
+      if (Math.random() < 0.45){
+        const padKind = ['yellow','red'][Math.floor(Math.random()*2)];
+        Pads.spawn({ kind: padKind, x: this.cursor, y: this.groundY - 8 });
+        // Platform spawns 200px ahead — accounts for ~25 frames of scroll
+        // during the jump rise at avg speed 8 px/frame.
+        const platX = this.cursor + 200;
+        const platY = this.groundY - 200;
+        Obstacles.spawn('platform', platX, { groundY: this.groundY, cy: platY });
+        // Orb just above platform top — reachable from the platform or apex
         const ok = ['yellow','red','blue','pink','green'];
-        Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)], x: this.cursor + 40, y: this.groundY - 180 - Math.random()*60 });
+        Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)], x: platX + 40, y: platY - 30 });
+        // Coin trail leading TO the pad so player knows to step on it
+        Coins.spawnLine(this.cursor - 100, this.groundY - 40, 5, 22, 'yellow');
+        this.cursor += 380;
       }
-      // Pad sometimes
-      if (Math.random() < 0.12){
+      // Standalone low orb (reachable by normal jump, no pad)
+      else if (Math.random() < 0.20){
+        const ok = ['yellow','red','blue','pink','green'];
+        Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)], x: this.cursor + 60, y: this.groundY - 100 - Math.random()*30 });
+      }
+      // Standalone pad (pure bounce, no orb)
+      else if (Math.random() < 0.10){
         const pk = ['yellow','pink','red','blue'];
         Pads.spawn({ kind: pk[Math.floor(Math.random()*pk.length)], x: this.cursor, y: this.groundY - 8 });
       }

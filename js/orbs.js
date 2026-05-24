@@ -31,12 +31,13 @@ export const Orbs = {
     this.list = this.list.filter(o => o.x > -50 && (!o.used || o.fade>0));
   },
   _activate(o, p){
+    p._cuttableJump = false; // pad/orb launches cannot be cut short
     switch(o.kind){
-      case 'yellow': p.vy = -14 * p.gravityDir; p.events.push('jump'); break;
-      case 'red':    p.vy = -18 * p.gravityDir; p.events.push('jump'); break;
-      case 'pink':   p.vy = -10 * p.gravityDir; p.events.push('jump'); break;
+      case 'yellow': p.vy = -18 * p.gravityDir; p.events.push('jump'); break;
+      case 'red':    p.vy = -24 * p.gravityDir; p.events.push('jump'); break;
+      case 'pink':   p.vy = -13 * p.gravityDir; p.events.push('jump'); break;
       case 'blue':   p.gravityDir *= -1; p.vy = 0; p.events.push('gravFlip'); break;
-      case 'green':  p.gravityDir *= -1; p.vy = -10 * p.gravityDir; p.events.push('gravFlip'); break;
+      case 'green':  p.gravityDir *= -1; p.vy = -13 * p.gravityDir; p.events.push('gravFlip'); break;
       case 'spider': {
         if (p.gravityDir > 0){ p.y = p.ceilingY; p.gravityDir = -1; }
         else { p.y = p.groundY - p.h; p.gravityDir = 1; }
@@ -84,10 +85,11 @@ export const Pads = {
     this.list = this.list.filter(p => p.x + p.w > -50);
   },
   _activate(pad, p){
+    p._cuttableJump = false; // pad launches cannot be cut short
     switch(pad.kind){
-      case 'yellow': p.vy = -16 * p.gravityDir; break;
-      case 'pink':   p.vy = -10 * p.gravityDir; break;
-      case 'red':    p.vy = -22 * p.gravityDir; break;
+      case 'yellow': p.vy = -22 * p.gravityDir; break;   // ~230px — clears platform + orb
+      case 'pink':   p.vy = -15 * p.gravityDir; break;   // ~107px — small bounce
+      case 'red':    p.vy = -28 * p.gravityDir; break;   // ~373px — very high
       case 'blue':   p.gravityDir *= -1; p.vy = 0; break;
       case 'spider': {
         if (p.gravityDir > 0){ p.y = p.ceilingY; p.gravityDir = -1; }

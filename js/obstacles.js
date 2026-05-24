@@ -35,7 +35,7 @@ export const Obstacles = {
       case 'laser':        o.w=8; o.h=200; o.y=o.cy != null ? o.cy - 100 : g - 220; break;
       case 'rock':         o.w=26; o.h=26; o.y= -30; o.fall=true; break;
       case 'wind':         o.w=60; o.h=120; o.y= g - 220; break;
-      case 'platform':     o.w=80; o.h=10; o.y = o.cy != null ? o.cy : g - 80; o.osc=Math.random()*Math.PI*2; o.baseY = o.y; break;
+      case 'platform':     o.w=110; o.h=10; o.y = o.cy != null ? o.cy : g - 80; o.osc=Math.random()*Math.PI*2; o.baseY = o.y; break;
       case 'crusher':      o.w=46; o.h=46; o.y = -100; o.crushPhase=0; break;
       case 'spikeWall':    o.w=20; o.h=180; o.y = g - 180; o.closeSpeed = 0.3; break;
       case 'electricFence':o.w=18; o.h=90; o.y = g - 90; o.spark=0; break;
@@ -45,6 +45,38 @@ export const Obstacles = {
 
   tick(scrollSpeed, player, onDeath){
     this.t += 1;
+    // Platform landing: if falling onto a platform from above, snap player on top
+    if (player && player.alive){
+      for (const o of this.list){
+        if (o.type !== 'platform') continue;
+        const px = player.x + player.w/2;
+        if (px > o.x && px < o.x + o.w && player.vy * player.gravityDir >= 0){
+          if (player.gravityDir > 0){
+            // Falling down — land on top of platform if crossing its top edge
+            const topY = o.y;
+            const prevBottom = player.y + player.h - player.vy;
+            const curBottom = player.y + player.h;
+            if (prevBottom <= topY + 1 && curBottom >= topY){
+              player.y = topY - player.h;
+              player.vy = 0;
+              // Treat this platform as the effective ground for jump
+              player._onPlatform = true;
+              player._platformY = topY;
+            }
+          }
+        }
+      }
+      // Clear platform-flag if player drifts off
+      if (player._onPlatform){
+        let stillOn = false;
+        const px = player.x + player.w/2;
+        for (const o of this.list){
+          if (o.type !== 'platform') continue;
+          if (px > o.x && px < o.x + o.w && Math.abs((player.y + player.h) - o.y) < 2){ stillOn = true; break; }
+        }
+        if (!stillOn) player._onPlatform = false;
+      }
+    }
     for (const o of this.list){
       o.x -= scrollSpeed;
       o.t++;
@@ -60,7 +92,7 @@ export const Obstacles = {
           break;
         case 'wind': o.t++; break;
         case 'platform':
-          o.osc += 0.04; o.y = o.baseY + Math.sin(o.osc)*30; break;
+          o.osc += 0.04; o.y = o.baseY + Math.sin(o.osc)*6; break;
         case 'crusher':
           o.crushPhase += 0.05;
           o.y = -50 + (Math.sin(o.crushPhase)*100 + 100); break;

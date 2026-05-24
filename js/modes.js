@@ -14,24 +14,28 @@ export const Modes = {
     label:'CUBE', color:'#00f0ff',
     tick(p, dt, input){
       const G = 1.05 * p.gravityDir;
-      const onGround = p.gravityDir > 0 ? (p.y + p.h >= p.groundY - 0.5) : (p.y <= p.ceilingY + 0.5);
+      const onSurface = p.gravityDir > 0
+        ? (p.y + p.h >= p.groundY - 0.5 || p._onPlatform)
+        : (p.y <= p.ceilingY + 0.5);
       // jump-buffer + coyote
       if (input.actionPressed) p.jumpBuffer = 8;
-      if (onGround){ p.coyote = 6; p.airJumps = 0; }
+      if (onSurface){ p.coyote = 6; p.airJumps = 0; }
       else { p.coyote--; }
+      const onGround = onSurface;
       p.jumpBuffer--;
       const canJump = (onGround || p.coyote > 0) && p.jumpBuffer > 0;
       if (canJump){
+        // Tap or hold both give a generous full jump for forgiving gameplay.
+        // Hold gives a slight bump for skilled players who want more air.
         const power = input.actionHeld ? p.jumpPowerMax : p.jumpPowerMin;
         p.vy = -power * p.gravityDir;
         p.jumpBuffer = 0; p.coyote = 0;
         p.spinTarget += 90 * p.gravityDir;
         p.events.push('jump');
       }
-      // variable jump cut
-      if (!input.actionHeld && p.vy * p.gravityDir < -p.jumpPowerMin*0.5){
-        p.vy = -p.jumpPowerMin*0.5 * p.gravityDir;
-      }
+      // No variable-jump cut — every jump completes naturally. This guarantees
+      // that pad and orb launches (which set vy beyond jumpPowerMax) reach
+      // their full apex, and tap jumps actually clear obstacles.
       // crouch
       p.targetH = input.crouchHeld && onGround ? p.baseH * 0.5 : p.baseH;
       p.h += (p.targetH - p.h) * 0.4;
