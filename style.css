@@ -244,6 +244,13 @@ input[type=range]{accent-color:var(--cyan)}
   box-shadow:0 0 48px rgba(0,240,255,.35),inset 0 0 24px rgba(0,240,255,.1);
 }
 
+.kbd-hint{
+  display:inline-block;margin-left:8px;padding:2px 8px;border-radius:4px;
+  background:rgba(0,0,0,.4);border:1px solid rgba(0,240,255,.4);
+  font:700 11px 'Space Mono';letter-spacing:.5px;color:rgba(255,255,255,.85);
+  vertical-align:middle;
+}
+
 /* ─── CUSTOMIZER ─── */
 .cust-row{
   display:flex;align-items:center;gap:14px;font:700 14px 'Oxanium';color:#fff;

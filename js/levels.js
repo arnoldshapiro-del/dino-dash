@@ -44,7 +44,7 @@ export const LEVELS = [
     obstacles:['spike','shortCactus','slopeDown'],
     unlockReq:'L5' },
   { id:'L7',  world:W2, name:'FLAPPY SKIES',  theme:'Flappy Bird (heavy gravity ship)', modes:['ship'],
-    length:75, speed:0.85, flappy:true,
+    length:30, speed:0.85, flappy:true,
     palette:['#88c8ff','#aef0ff','#5dc8ff','#3aa8cc'],
     obstacles:['flappyPipe'],
     unlockReq:'L6' },

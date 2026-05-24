@@ -649,17 +649,44 @@ function endRun(cause){
     <p>Coins ${Game.coins} · Best ${Game.best} · ${Math.floor(runStats.timeS)}s · Modes ${runStats.modesVisited.size}/5</p>
     <p class="muted">Jumps ${runStats.jumps} · Portals ${runStats.portals} · Orbs ${runStats.orbs} · Max combo ×${runStats.maxCombo}</p>
     <div class="row">
-      <button class="btn" id="btn-retry">RETRY</button>
+      <button class="btn glow-strong" id="btn-retry">▶ RETRY  <span class="kbd-hint">SPACE</span></button>
       <button class="btn alt" id="btn-menu">MENU</button>
       <button class="btn" id="btn-share">SHARE</button>
     </div>
+    <p class="muted">Press SPACE or TAP to retry instantly</p>
   `);
-  document.getElementById('btn-retry').onclick = () => startRun({ mode:'endless' });
+  const retry = () => startRun({ mode:'endless' });
+  document.getElementById('btn-retry').onclick = retry;
   document.getElementById('btn-menu').onclick = () => showTitle();
   document.getElementById('btn-share').onclick = () => {
     const t = `I scored ${Math.floor(Game.score)} in Dino Dash! ${location.href}`;
     if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => UI.toast('Copied to clipboard!', '#00f0ff'));
   };
+  // SPACE / UP / TAP / CLICK to retry instantly from the death screen
+  const keyHandler = (e) => {
+    if (Game.state !== State.DEAD) return;
+    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW' || e.code === 'Enter'){
+      window.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('pointerdown', clickHandler);
+      e.preventDefault();
+      retry();
+    }
+  };
+  const clickHandler = (e) => {
+    if (Game.state !== State.DEAD) return;
+    // Don't hijack clicks on the MENU or SHARE buttons
+    const tag = e.target.tagName;
+    const id = e.target.id;
+    if (tag === 'BUTTON' && (id === 'btn-menu' || id === 'btn-share')) return;
+    window.removeEventListener('keydown', keyHandler);
+    document.removeEventListener('pointerdown', clickHandler);
+    retry();
+  };
+  // Defer so the click that caused the death doesn't immediately retry
+  setTimeout(() => {
+    window.addEventListener('keydown', keyHandler);
+    document.addEventListener('pointerdown', clickHandler);
+  }, 350);
 }
 
 let pressedThisFrame = false;
