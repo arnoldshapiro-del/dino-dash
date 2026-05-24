@@ -56,14 +56,13 @@ export const LevelPlayer = {
       return;
     }
     if (level.id === 'L9'){
-      // Pixel platformer — extra platforms
+      // Pixel platformer — extra platforms, generous spacing
       let xx = this.cursor;
       while (xx < this.endX){
         Obstacles.spawn('platform', xx, { groundY, cy: groundY - 80 - Math.random()*60 });
-        if (Math.random() < 0.5) Obstacles.spawn('shortCactus', xx + 100, { groundY });
-        if (Math.random() < 0.3) Obstacles.spawn('pterodactyl', xx + 60, { groundY, height:'mid' });
+        if (Math.random() < 0.4) Obstacles.spawn('shortCactus', xx + 200, { groundY });
         Coins.spawn({ kind:'yellow', x: xx + 40, y: groundY - 110 });
-        xx += 280 + Math.random()*120;
+        xx += 500 + Math.random()*180;
       }
       return;
     }
@@ -77,7 +76,7 @@ export const LevelPlayer = {
     let x = this.cursor;
     const len = (this.endX - this.cursor);
     // Wider chunks → less density. Tutorial levels (world 1) get extra spacing.
-    const chunkWidth = level.world === 1 ? 950 : 800;
+    const chunkWidth = level.world === 1 ? 1200 : 800;
     const chunks = Math.floor(len / chunkWidth);
     for (let i=0;i<chunks;i++){
       // Difficulty ramp: world 1 stays at d=0 (gentle tutorial). World 2+ uses 0/1/2.
@@ -119,6 +118,22 @@ export const LevelPlayer = {
       return;
     }
 
+    // W1 = tutorial: ONE small obstacle per chunk, generous coin trail.
+    // Chunks are spawned ~1100px apart (set in _build) so this gives
+    // ~1100px between obstacles — well over a full jump arc.
+    if (level.world === 1){
+      if (cact.length){
+        const easy = cact.includes('shortCactus') ? 'shortCactus' : cact[0];
+        Obstacles.spawn(easy, x+500, {groundY:g});
+      } else if (lazr.length){
+        Obstacles.spawn('laser', x+500, {groundY:g, cy: g - 180});
+      } else if (spk.length){
+        Obstacles.spawn(spk[0], x+500, {groundY:g});
+      }
+      // Long coin trail straight through
+      Coins.spawnLine(x+50, g-60, 14, 30, 'yellow');
+      return;
+    }
     // Decide layout per allowed — spacing 250+ apart so a player tap-jump
     // can complete its arc between obstacles.
     if (cact.length){

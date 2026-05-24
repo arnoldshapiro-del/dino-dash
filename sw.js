@@ -1,4 +1,4 @@
-const VERSION = 'dinodash-v3-1';
+const VERSION = 'dinodash-v3-3';
 const ASSETS = [
   './',
   './index.html',
@@ -33,7 +33,8 @@ const ASSETS = [
   './js/practice.js',
   './js/tutorial.js',
   './js/skins.js',
-  './js/audio.js'
+  './js/audio.js',
+  './js/firebase-sync.js'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS).catch(()=>null)));
@@ -46,6 +47,12 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const r = e.request;
   if (r.method !== 'GET') return;
+  const url = new URL(r.url);
+  // Don't intercept Firebase / Google domains — auth needs live network
+  if (url.hostname.includes('gstatic.com') ||
+      url.hostname.includes('firebase') ||
+      url.hostname.includes('google') ||
+      url.hostname.includes('firestore')) return;
   e.respondWith(
     caches.match(r).then(hit => hit || fetch(r).then(res => {
       const copy = res.clone();

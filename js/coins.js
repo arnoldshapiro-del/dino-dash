@@ -2,7 +2,8 @@
 import { Particles } from './particles.js';
 
 const COLOR = { yellow:'#ffd700', blue:'#00f0ff', gold:'#ffaa00' };
-const VALUE = { yellow:1, blue:5, gold:100 };
+// Doubled values so short sessions feel rewarding
+const VALUE = { yellow:2, blue:10, gold:200 };
 
 export const Coins = {
   list: [], pulse: 0, combo: 0, comboTimer: 0,

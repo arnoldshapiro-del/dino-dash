@@ -27,9 +27,26 @@ import { Tutorial } from './tutorial.js';
 import { ACHIEVEMENTS } from './achievements.js';
 import { SKINS, TRAILS } from './economy.js';
 import { Audio } from './audio.js';
+import { FirebaseSync } from './firebase-sync.js';
 
 // Haptic helper
 function haptic(ms){ if ('vibrate' in navigator) try{ navigator.vibrate(ms); }catch(_){} }
+
+// Hot-reload all module state from localStorage (used by Firestore pull)
+window.__reloadGameState = function(){
+  Game.load();
+  Stats.load();
+  Achievements.load();
+  Missions.load();
+  Daily.load();
+  Economy.load();
+  Levels.load();
+  Tutorial.load();
+  Shop.syncAchievementSkins();
+  Game.totalCoins = Economy.coins;
+  Game.dashPoints = Economy.dp;
+  if (Game.state === State.TITLE) showTitle();
+};
 
 const TARGET_W = 1280, TARGET_H = 720;
 let runStats = newRunStats();
@@ -59,25 +76,42 @@ function showTitle(){
   const dailyHtml = daily
     ? `<p class="muted">📅 Daily: ${daily.desc} ${Daily.claimed?'✓':''} · resets in ${Daily.countdown()}</p>`
     : '';
+  const cloudHtml = FirebaseSync.user
+    ? `<button class="btn cloud-on" id="btn-cloud">☁️ ${(FirebaseSync.user.displayName||'Signed in').slice(0,16)} — synced</button>`
+    : `<button class="btn cloud-off" id="btn-cloud">☁️ Cloud Save (sign in)</button>`;
   UI.showScreen('title', `
-    <h1>DINO DASH</h1>
+    <h1 class="title-shine">DINO DASH</h1>
     <p>Endless runner + Geometry Dash + 10 classic games. Tap, hold, swap modes, beat 16 levels, build a shop empire.</p>
     <div class="row">
-      <button class="btn" id="btn-play">▶ PLAY</button>
+      <button class="btn glow-strong" id="btn-play">▶ PLAY</button>
       <button class="btn alt" id="btn-shop">🛒 SHOP</button>
       <button class="btn" id="btn-collection">🏆 COLLECTION</button>
       <button class="btn" id="btn-stats">📊 STATS</button>
       <button class="btn" id="btn-options">⚙️ OPTIONS</button>
     </div>
+    <p class="hud-totals"><span class="best">★ ${Game.best}</span> · <span class="coins">◎ ${Game.totalCoins}</span> · <span class="dp">◆ ${Game.dashPoints}</span></p>
     <p class="muted">Stars: ${Levels.totalStars()}/48 · Levels: ${Object.keys(Levels.progress).length}/16</p>
-    <p class="muted">Best: ${Game.best}  ·  Coins: ${Game.totalCoins}  ·  DP: ${Game.dashPoints}</p>
     ${dailyHtml}
+    <div class="row">${cloudHtml}</div>
   `);
   document.getElementById('btn-play').onclick = () => showModeSelect();
   document.getElementById('btn-shop').onclick = () => Shop.open(showTitle);
   document.getElementById('btn-collection').onclick = () => showCollection();
   document.getElementById('btn-stats').onclick = () => showStats();
   document.getElementById('btn-options').onclick = () => showOptions();
+  document.getElementById('btn-cloud').onclick = async () => {
+    if (FirebaseSync.user){
+      await FirebaseSync.signOut();
+      UI.toast('Signed out (progress kept locally)', '#ffe600');
+      showTitle();
+    } else {
+      UI.toast('Opening Google sign-in…', '#00f0ff');
+      const ok = await FirebaseSync.signIn();
+      if (ok) UI.toast('Signed in! Progress now syncs to cloud.', '#39ff14');
+      else UI.toast('Sign-in cancelled', '#ff3344');
+      showTitle();
+    }
+  };
 
   // Konami detector
   konamiBuffer.length = 0;
@@ -811,6 +845,10 @@ window.addEventListener('load', () => {
   // Sync Economy currency into Game for HUD compatibility
   Game.totalCoins = Economy.coins;
   Game.dashPoints = Economy.dp;
+  // Firebase cross-device sync — if user was signed in last session,
+  // this auto-pulls cloud save and refreshes the title screen.
+  FirebaseSync.onChange = () => { if (Game.state === State.TITLE) showTitle(); };
+  FirebaseSync.init();
   resize();
   window.addEventListener('resize', resize);
   bindInputs();

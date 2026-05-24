@@ -229,6 +229,12 @@ export const ChunkGen = {
         const pk = ['yellow','pink','red','blue'];
         Pads.spawn({ kind: pk[Math.floor(Math.random()*pk.length)], x: this.cursor, y: this.groundY - 8 });
       }
+      // ALWAYS spawn a coin trail so every cube section is rewarding
+      if (Math.random() < 0.6){
+        const count = 5 + Math.floor(Math.random()*5);
+        const kind = Math.random() < 0.25 ? 'blue' : 'yellow';
+        Coins.spawnLine(this.cursor + 50, this.groundY - 50 - Math.random()*60, count, 26, kind);
+      }
     }
   },
 

@@ -153,8 +153,8 @@ export const Special = {
     // Missiles (slowly-tracking, not perfectly homing — players can dodge by
     // moving consistently up or down once the warning appears)
     if (--this.state.nextMissileT <= 0){
-      this.state.nextMissileT = 600;                   // every 10s (was 3s)
-      this.state.missiles.push({ x: Game.w + 60, y: player.y, warn: 240, lockY: player.y });
+      this.state.nextMissileT = 900;                   // every 15s
+      this.state.missiles.push({ x: Game.w + 60, y: player.y, warn: 300, lockY: player.y });
     }
     for (const m of this.state.missiles){
       if (m.warn > 0){
