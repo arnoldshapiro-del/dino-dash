@@ -113,58 +113,79 @@ export const LevelPlayer = {
   _buildPlatformPath(level, g, allowed){
     const start = this.cursor;
     const end = this.endX - 300;
+    // Levels can opt into more-forgiving design by NOT including 'tallCactus'
+    // (a proxy flag — if the level only allows spikes + small obstacles
+    // it's signaling "tutorial / introductory platform path"). Tracks like
+    // L6 GEOMETRIC BEAT use this.
+    const forgiving = !allowed.has('tallCactus') && !allowed.has('cactusCluster');
     // First few "starter" platforms at low height so player can step on
     // them without jumping. Each is close to the previous so the path
-    // teaches the player the rhythm.
-    Obstacles.spawn('platform', start + 300, { groundY: g, cy: g - 30 });
-    Obstacles.spawn('platform', start + 450, { groundY: g, cy: g - 60 });
-    Coins.spawnLine(start + 320, g - 90, 6, 26, 'yellow');
-    let x = start + 620;
-    let py = g - 80;
-    const minY = g - 200;
+    // teaches the player the rhythm. In forgiving mode, give EXTRA starter
+    // platforms so they have time to get the rhythm.
+    // Use the same wide platforms as the main path so starters feel continuous
+    const starterW = forgiving ? 140 : 110;
+    Obstacles.spawn('platform', start + 280, { groundY: g, cy: g - 30, size: starterW });
+    Obstacles.spawn('platform', start + 410, { groundY: g, cy: g - 45, size: starterW });
+    Obstacles.spawn('platform', start + 540, { groundY: g, cy: g - 60, size: starterW });
+    if (forgiving){
+      Obstacles.spawn('platform', start + 660, { groundY: g, cy: g - 70, size: starterW });
+      Obstacles.spawn('platform', start + 780, { groundY: g, cy: g - 60, size: starterW });
+    }
+    Coins.spawnLine(start + 290, g - 100, 10, 26, 'yellow');
+    let x = start + (forgiving ? 900 : 660);
+    let py = g - (forgiving ? 60 : 80);
+    const minY = g - (forgiving ? 160 : 200);
     const maxY = g - 60;
+    // Wider platforms in forgiving mode = bigger landing target
+    const platW = forgiving ? 140 : 110;
+    // In forgiving mode, hazard density drops to 40% (60% of gaps are safe-fall)
+    const hazardChance = forgiving ? 0.4 : 1.0;
 
     while (x < end){
-      // Place a platform (the path tile)
-      Obstacles.spawn('platform', x, { groundY: g, cy: py });
+      // Place a platform (the path tile) — wider in forgiving mode
+      Obstacles.spawn('platform', x, { groundY: g, cy: py, size: platW });
       // Coin floating above each platform
-      Coins.spawn({ kind: Math.random() < 0.2 ? 'blue' : 'yellow', x: x + 55, y: py - 32 });
+      Coins.spawn({ kind: Math.random() < 0.2 ? 'blue' : 'yellow', x: x + platW/2, y: py - 32 });
 
-      // Gap to next platform: 90-160px horizontal (tap-jump territory).
-      // With cube physics, scroll-during-tap-jump ≈ 130-200px so player
-      // naturally arcs onto the next platform with reasonable timing.
-      const gap = 90 + Math.random() * 70;
-      const nextX = x + 110 + gap;       // 110 = platform width
+      // Gap to next platform — wider gap in non-forgiving mode for challenge
+      const gap = (forgiving ? 80 : 90) + Math.random() * (forgiving ? 50 : 70);
+      const nextX = x + platW + gap;
 
-      // Next platform height: vary so the path zig-zags up and down.
-      // Reachable jump: ~120px UP (under max hold-jump of 132), ~80px DOWN
-      // (so the recovery jump from a lower platform doesn't undershoot).
-      let nextY = py + (Math.random()*180 - 100);
-      // Clamp to overall range
+      // Next platform height — gentler variance in forgiving mode
+      const variance = forgiving ? 100 : 180;
+      let nextY = py + (Math.random()*variance - variance/2);
       nextY = Math.max(minY, Math.min(maxY, nextY));
-      // Cap the height delta so each hop is reachable
-      if (py - nextY > 90) nextY = py - 90;       // going UP no more than 90
-      if (nextY - py > 100) nextY = py + 100;     // going DOWN no more than 100
+      const maxUp = forgiving ? 60 : 90;
+      const maxDown = forgiving ? 70 : 100;
+      if (py - nextY > maxUp) nextY = py - maxUp;
+      if (nextY - py > maxDown) nextY = py + maxDown;
 
-      // In the GAP between platforms (on the ground), place a hazard so
-      // falling = death. Type depends on what the level allows.
-      const hazardX = x + 110 + gap*0.3;
-      if (allowed.has('spike')) Obstacles.spawn('spike', hazardX, { groundY: g });
-      else if (allowed.has('shortCactus')) Obstacles.spawn('shortCactus', hazardX, { groundY: g });
-      else if (allowed.has('tallCactus')) Obstacles.spawn('tallCactus', hazardX, { groundY: g });
-      else if (allowed.has('sawblade')) Obstacles.spawn('sawblade', hazardX, { groundY: g });
+      // In the GAP between platforms, optionally place a hazard.
+      // Forgiving mode: only 40% of gaps have hazards (the rest are safe
+      // ground falls — player can recover by jumping up to next platform).
+      const hazardX = x + platW + gap*0.3;
+      if (Math.random() < hazardChance){
+        if (allowed.has('spike')) Obstacles.spawn('spike', hazardX, { groundY: g });
+        else if (allowed.has('shortCactus')) Obstacles.spawn('shortCactus', hazardX, { groundY: g });
+        else if (allowed.has('tallCactus')) Obstacles.spawn('tallCactus', hazardX, { groundY: g });
+        else if (allowed.has('sawblade')) Obstacles.spawn('sawblade', hazardX, { groundY: g });
+      } else if (forgiving){
+        // No hazard → put a YELLOW PAD on the ground as a safety net so
+        // falling here actually catapults you BACK up to the platforms.
+        Pads.spawn({ kind: 'yellow', x: hazardX, y: g - 8 });
+      }
 
       // Occasionally: slope back down to ground for variety + recovery
       if (Math.random() < 0.12 && allowed.has('slopeDown')){
         Obstacles.spawn('slopeDown', nextX, { groundY: g, height: 60 });
       }
 
-      // Occasionally: a pad on the ground between platforms (catapult upward)
-      if (Math.random() < 0.18){
+      // Pads: in forgiving mode, MORE pads to help recovery
+      if (Math.random() < (forgiving ? 0.3 : 0.18)){
         Pads.spawn({ kind: 'yellow', x: hazardX + 50, y: g - 8 });
       }
-      // Occasionally: a jump orb in the air near the platform
-      if (Math.random() < 0.15){
+      // Jump orbs in the air near platforms (extra mid-air boost option)
+      if (Math.random() < (forgiving ? 0.22 : 0.15)){
         const ok = ['yellow','pink','green'];
         Orbs.spawn({ kind: ok[Math.floor(Math.random()*ok.length)], x: x + 70, y: py - 60 });
       }
@@ -172,9 +193,10 @@ export const LevelPlayer = {
       py = nextY;
     }
     // Long landing platform at the end so finish-line is forgiving
-    Obstacles.spawn('platform', x, { groundY: g, cy: py });
-    Obstacles.spawn('platform', x + 120, { groundY: g, cy: py });
-    Coins.spawn({ kind: 'gold', x: x + 60, y: py - 40 });
+    Obstacles.spawn('platform', x, { groundY: g, cy: py, size: platW });
+    Obstacles.spawn('platform', x + platW + 10, { groundY: g, cy: py, size: platW });
+    Obstacles.spawn('platform', x + 2*platW + 20, { groundY: g, cy: py, size: platW });
+    Coins.spawn({ kind: 'gold', x: x + platW/2, y: py - 40 });
   },
 
   // ─────────────────────────────────────────────────────────────────────

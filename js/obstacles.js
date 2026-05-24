@@ -35,7 +35,7 @@ export const Obstacles = {
       case 'laser':        o.w=8; o.h=200; o.y=o.cy != null ? o.cy - 100 : g - 220; break;
       case 'rock':         o.w=26; o.h=26; o.y= -30; o.fall=true; break;
       case 'wind':         o.w=60; o.h=120; o.y= g - 220; break;
-      case 'platform':     o.w=110; o.h=10; o.y = o.cy != null ? o.cy : g - 80; o.osc=Math.random()*Math.PI*2; o.baseY = o.y; break;
+      case 'platform':     o.w=o.size||110; o.h=10; o.y = o.cy != null ? o.cy : g - 80; o.osc=Math.random()*Math.PI*2; o.baseY = o.y; break;
       case 'crusher':      o.w=46; o.h=46; o.y = -100; o.crushPhase=0; break;
       case 'spikeWall':    o.w=20; o.h=180; o.y = g - 180; o.closeSpeed = 0.3; break;
       case 'electricFence':o.w=18; o.h=90; o.y = g - 90; o.spark=0; break;
