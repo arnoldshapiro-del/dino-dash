@@ -145,7 +145,24 @@ export const Special = {
       x += 360 + Math.random()*200;                // 360-560 between lasers (was 200-380)
     }
   },
-  tickJetpack(player, scrollSpeed, onDeath){
+  tickJetpack(player, scrollSpeed, onDeath, inputs){
+    // ── FLYING PHYSICS — ship-style thrust ──
+    // Hold action = thrust upward · Release = fall.
+    // Without this the player just hangs in place. (This was the bug.)
+    const held = inputs && inputs.actionHeld;
+    const thrust = -0.55;
+    const fall = 0.55;
+    player.vy = (player.vy || 0) + (held ? thrust : fall);
+    if (player.vy > 9) player.vy = 9;
+    if (player.vy < -9) player.vy = -9;
+    player.y += player.vy;
+    // Clamp to arena top/bottom (non-lethal — just slide along)
+    if (player.y + player.h > player.groundY){ player.y = player.groundY - player.h; player.vy = 0; }
+    if (player.y < player.ceilingY){ player.y = player.ceilingY; player.vy = 0; }
+    // Visual tilt (read by player.draw for ship mode)
+    const targetTilt = held ? -30 : 30;
+    player.tilt = (player.tilt || 0) + (targetTilt - (player.tilt || 0)) * 0.2;
+
     // Lasers
     for (const l of this.state.lasers){
       l.x -= scrollSpeed;

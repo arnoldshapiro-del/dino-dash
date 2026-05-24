@@ -857,7 +857,7 @@ function tick(dt){
     };
     if (Special.active === 'flappy') Special.tickFlappy(Game.player, ss, onPlayerDeath);
     else if (Special.active === 'tunnel') Special.tickTunnel(Game.player, ss, onPlayerDeath, inputs);
-    else if (Special.active === 'jetpack') Special.tickJetpack(Game.player, ss, onPlayerDeath);
+    else if (Special.active === 'jetpack') Special.tickJetpack(Game.player, ss, onPlayerDeath, inputs);
     else if (Special.active === 'pacman') Special.tickPacman(Game.player, ss, onPlayerDeath);
     else if (Special.active === 'crossy') Special.tickCrossy(Game.player, ss, onPlayerDeath);
     else if (Special.active === 'tron') Special.tickTron(Game.player, ss, onPlayerDeath, inputs);
