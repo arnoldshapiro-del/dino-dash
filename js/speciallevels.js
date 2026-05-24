@@ -28,24 +28,28 @@ export const Special = {
     // Spawn player mid-air so they don't instantly hit the floor
     player.y = groundY * 0.4;
     player.vy = 0;
-    // Generate pipes with generous gap height + spacing
-    let x = 1200;
+    // VERY generous pipe gaps + spacing so even a bad player can get through
+    let x = 1500;
     while (x < endX){
-      const gap = 220 + Math.random()*60;          // 220-280 px gap (was 140-200)
-      const gapCenter = 240 + Math.random()*(Game.h*0.4);
+      const gap = 300 + Math.random()*60;          // 300-360px gap (was 220-280)
+      const gapCenter = 260 + Math.random()*(Game.h*0.35);
       this.state.pipes.push({ x, gap, gapCenter, passed:false, scored:false });
-      x += 520 + Math.random()*160;                // 520-680 px between pipes (was 360-480)
+      x += 700 + Math.random()*200;                // 700-900px between pipes (was 520-680)
     }
   },
   tickFlappy(player, scrollSpeed, onDeath){
-    // Heavy gravity overrides ship.tick — handled by setting vy after standard tick is bypassed.
-    // We'll just custom physics here:
-    const G = 0.9;
-    if (player._actionPressed) player.vy = -8;
+    const G = 0.85;                          // softer gravity (was 0.9)
+    if (player._actionPressed) player.vy = -9;  // slightly stronger jump (was -8)
     player.vy += G;
     player.y += player.vy;
     if (player.y < player.ceilingY){ player.y = player.ceilingY; player.vy = 0; }
-    if (player.y + player.h > player.groundY){ onDeath('floor'); return; }
+    // FLOOR IS NO LONGER LETHAL — player bounces UP if they hit the floor.
+    // This removes the "fall to your death" failure mode entirely.
+    // Only pipes can kill you in Flappy mode now.
+    if (player.y + player.h > player.groundY){
+      player.y = player.groundY - player.h;
+      player.vy = -6;                        // small bounce
+    }
     // Move pipes left
     for (const p of this.state.pipes){
       p.x -= scrollSpeed;
@@ -77,18 +81,17 @@ export const Special = {
   initTunnel(player, groundY, endX){
     this.active = 'tunnel';
     this.state = { lane: 1, lanes:[groundY-28, groundY-28, groundY-28], obstacles:[], endX };
-    // Spawn obstacles
-    let x = 1200;
+    // VERY sparse — easy to memorize and lane-change
+    let x = 1500;
     while (x < endX){
       const lane = Math.floor(Math.random()*3);
-      const type = Math.random() < 0.5 ? 'high' : 'low';
-      this.state.obstacles.push({ x, lane, type, hit:false });
-      // Coin trail in a different lane
-      const coinLane = (lane + 1 + Math.floor(Math.random()*2)) % 3;
-      for (let i=0;i<5;i++){
-        Coins.spawn({ kind:'yellow', x: x - 100 + i*22, y: this._tunnelY(coinLane, groundY) });
+      // Always 'low' type so player JUST has to jump over it (no crouch confusion)
+      this.state.obstacles.push({ x, lane, type:'low', hit:false });
+      const safeLane = (lane + 1) % 3;
+      for (let i=0;i<8;i++){
+        Coins.spawn({ kind:'yellow', x: x - 100 + i*22, y: this._tunnelY(safeLane, groundY) });
       }
-      x += 360 + Math.random()*200;
+      x += 1000 + Math.random()*300;            // 1000-1300px between obstacles
     }
     player.tunnelLane = 1;
   },
@@ -133,13 +136,13 @@ export const Special = {
   // ─────────── L11 JETPACK ───────────
   initJetpack(player, groundY, endX){
     this.active = 'jetpack';
-    this.state = { lasers:[], missiles:[], nextMissileT:0, endX };
+    this.state = { lasers:[], missiles:[], nextMissileT:600, endX };
     player.setMode('ship');
-    // Pre-spawn lasers
-    let x = 1000;
+    // Lasers spaced WIDE apart with predictable gap pattern
+    let x = 1200;
     while (x < endX){
-      this.state.lasers.push({ x, y: 80 + Math.random()*(groundY-160), h: 6, w: 200, hit:false });
-      x += 200 + Math.random()*180;
+      this.state.lasers.push({ x, y: 100 + Math.random()*(groundY-200), h: 6, w: 160, hit:false });
+      x += 360 + Math.random()*200;                // 360-560 between lasers (was 200-380)
     }
   },
   tickJetpack(player, scrollSpeed, onDeath){
@@ -153,8 +156,8 @@ export const Special = {
     // Missiles (slowly-tracking, not perfectly homing — players can dodge by
     // moving consistently up or down once the warning appears)
     if (--this.state.nextMissileT <= 0){
-      this.state.nextMissileT = 900;                   // every 15s
-      this.state.missiles.push({ x: Game.w + 60, y: player.y, warn: 300, lockY: player.y });
+      this.state.nextMissileT = 3600;                  // every 60s — essentially one per level
+      this.state.missiles.push({ x: Game.w + 60, y: player.y, warn: 420, lockY: player.y });
     }
     for (const m of this.state.missiles){
       if (m.warn > 0){
@@ -327,15 +330,19 @@ export const Special = {
     if (inputs.upPressed) wantTurn(3);
     if (inputs.downPressed) wantTurn(1);
     const [dx,dy] = dirs[player.tronDir];
-    const speed = 3;                              // slower (was 4)
+    const speed = 2.5;
     player.x += dx * speed; player.y += dy * speed;
-    // Slight border margin so AI has buffer
-    if (player.x < 20 || player.x > Game.w - 20 || player.y < 20 || player.y > Game.h - 20){ onDeath('wall'); return; }
+    // WRAP around walls instead of dying (Pac-Man / Snake style) — much
+    // more forgiving and reads as classic arcade behavior anyway.
+    if (player.x < 20){ player.x = Game.w - 30; this.state.trails[0].length = 0; }
+    if (player.x > Game.w - 20){ player.x = 30; this.state.trails[0].length = 0; }
+    if (player.y < 20){ player.y = Game.h - 30; this.state.trails[0].length = 0; }
+    if (player.y > Game.h - 20){ player.y = 30; this.state.trails[0].length = 0; }
     const t = this.state.trails[0];
     t.push({ x: player.x + player.w/2, y: player.y + player.h/2 });
-    if (t.length > 250) t.shift();
-    // Self-collide skip latest 20 (was 12) so tight turns don't kill you
-    for (let i=0;i<t.length-20;i++){
+    if (t.length > 100) t.shift();              // SHORT trail (was 250) — rarely loops back
+    // Self-collide skip latest 40 (was 20) so tight turns are forgiving
+    for (let i=0;i<t.length-40;i++){
       if (Math.abs(t[i].x - (player.x+player.w/2)) < 5 && Math.abs(t[i].y - (player.y+player.h/2)) < 5){ onDeath('selfTrail'); return; }
     }
     // Spawn occasional data-fragment coins
@@ -372,31 +379,32 @@ export const Special = {
   },
   tickBoss(player, scrollSpeed, onDeath){
     this.state.phaseT++;
-    // Phase 1: stomp shockwaves — slower spawn, slower travel
+    // VERY easy boss — every phase has wide telegraphing windows.
+    // Phase 1: stomp shockwaves
     if (this.bossPhase === 1){
       if (player.mode !== 'cube') player.setMode('cube');
-      if (this.state.phaseT % 150 === 0){      // every 2.5s (was 1.5s)
-        this.state.attacks.push({ kind:'shock', x: Game.w, y: player.groundY-10, vx:-5, life:200 });
+      if (this.state.phaseT % 360 === 0){      // every 6s — plenty of room to jump
+        this.state.attacks.push({ kind:'shock', x: Game.w, y: player.groundY-10, vx:-3.5, life:340 });
       }
-      if (this.state.phaseT > 60*60){ this.bossPhase = 2; this.state.phaseT = 0; player.setMode('ship'); }
+      if (this.state.phaseT > 60*30){ this.bossPhase = 2; this.state.phaseT = 0; player.setMode('ship'); }
     }
-    // Phase 2: fire breath — fewer streams, slower
+    // Phase 2: fire breath
     else if (this.bossPhase === 2){
       if (player.mode !== 'ship') player.setMode('ship');
-      if (this.state.phaseT % 110 === 0){      // every 1.8s (was 1s)
-        const fy = 80 + Math.random()*(Game.h - 200);
-        this.state.attacks.push({ kind:'fire', x: Game.w, y: fy, vx:-6, life:200, h:20 });
+      if (this.state.phaseT % 180 === 0){      // every 3s (was 1.8s)
+        const fy = 100 + Math.random()*(Game.h - 240);
+        this.state.attacks.push({ kind:'fire', x: Game.w, y: fy, vx:-5, life:240, h:20 });
       }
-      if (this.state.phaseT > 60*90){ this.bossPhase = 3; this.state.phaseT = 0; player.setMode('wave'); }
+      if (this.state.phaseT > 60*45){ this.bossPhase = 3; this.state.phaseT = 0; player.setMode('wave'); }
     }
-    // Phase 3: shard chaos — manageable cadence
+    // Phase 3: shard chaos
     else if (this.bossPhase === 3){
       if (player.mode !== 'wave') player.setMode('wave');
-      if (this.state.phaseT % 200 === 0){      // every 3.3s (was 1.17s)
-        const fy = 100 + Math.random()*(Game.h - 240);
-        this.state.attacks.push({ kind:'shard', x: Game.w, y: fy, vx:-6, life:250 });
+      if (this.state.phaseT % 300 === 0){      // every 5s (was 3.3s)
+        const fy = 120 + Math.random()*(Game.h - 280);
+        this.state.attacks.push({ kind:'shard', x: Game.w, y: fy, vx:-5, life:280 });
       }
-      if (this.state.phaseT > 60*90){
+      if (this.state.phaseT > 60*45){
         this.hp = 0;
       }
     }

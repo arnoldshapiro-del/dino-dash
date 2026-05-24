@@ -113,11 +113,10 @@ export const LevelPlayer = {
   _buildPlatformPath(level, g, allowed){
     const start = this.cursor;
     const end = this.endX - 300;
-    // Levels can opt into more-forgiving design by NOT including 'tallCactus'
-    // (a proxy flag — if the level only allows spikes + small obstacles
-    // it's signaling "tutorial / introductory platform path"). Tracks like
-    // L6 GEOMETRIC BEAT use this.
-    const forgiving = !allowed.has('tallCactus') && !allowed.has('cactusCluster');
+    // ALL platform-path levels are forgiving by default (per user playtest).
+    // The path is the gameplay; the hazards are decoration not death-walls.
+    // 60% of gaps are safe-fall with pads as recovery → very accessible.
+    const forgiving = true;
     // First few "starter" platforms at low height so player can step on
     // them without jumping. Each is close to the previous so the path
     // teaches the player the rhythm. In forgiving mode, give EXTRA starter
@@ -197,6 +196,21 @@ export const LevelPlayer = {
     Obstacles.spawn('platform', x + platW + 10, { groundY: g, cy: py, size: platW });
     Obstacles.spawn('platform', x + 2*platW + 20, { groundY: g, cy: py, size: platW });
     Coins.spawn({ kind: 'gold', x: x + platW/2, y: py - 40 });
+
+    // ── DECORATIVE TOP-SIDE GENERATION ──
+    // Hang occasional ceiling spike clusters in the upper half of the arena
+    // so the level has visual variety in both top and bottom halves.
+    // These are non-blocking (they don't kill the cube on the floor/platforms
+    // below) — placed too high to reach with a normal jump.
+    const ceilingY = g * 0.098;
+    let cx = start + 600;
+    while (cx < end){
+      // Cluster of 2 ceiling spikes — decorative since they're up at
+      // ceilingY, well above platform height (max g-160)
+      Obstacles.spawn('spikeCeiling', cx, { groundY: g, ceilingY });
+      Obstacles.spawn('spikeCeiling', cx + 30, { groundY: g, ceilingY });
+      cx += 700 + Math.random()*400;
+    }
   },
 
   // ─────────────────────────────────────────────────────────────────────
@@ -210,40 +224,32 @@ export const LevelPlayer = {
     const start = this.cursor;
     const end = this.endX - 200;
     const centerY = (g + ceilingY) / 2;
-    // The safe-path centerline snakes up and down sinusoidally
-    const period = 800;
-    const amp = (g - ceilingY) * 0.22;
-    // Half-width of safe band — wave threads through this corridor
-    const safeBand = (g - ceilingY) * 0.42;
+    // VERY gentle wave tunnel: single spikes far apart, alternating sides,
+    // so even a poor player has time to react and angle the wave correctly.
+    const period = 1000;
+    const amp = (g - ceilingY) * 0.18;
 
-    // CLUSTER spikes into saw-tooth walls. Every chunk of ~240px,
-    // spawn 3 adjacent spikes on one side that form a jagged wall.
-    let x = start + 200;
+    let x = start + 300;
+    let lastSide = null;
     while (x < end){
       const t = (x - start) / period * Math.PI * 2;
       const pathY = centerY + Math.sin(t) * amp;
-      const topRoom = pathY - safeBand/2 - ceilingY;
-      const botRoom = (g - pathY) - safeBand/2;
-      // Cluster of 3 spikes on the side with more room — they form a
-      // jagged wall protruding into the play area
-      const onTop = topRoom > botRoom;
-      for (let k = 0; k < 3; k++){
-        if (onTop){
-          Obstacles.spawn('spikeCeiling', x + k*30, { groundY: g, ceilingY });
-        } else {
-          Obstacles.spawn('spike', x + k*30, { groundY: g });
-        }
+      // Alternate sides — never two spikes on the same side in a row
+      // (so the player always knows: hit spike on floor → go up,
+      // hit spike on ceiling → go down)
+      const onTop = lastSide === 'bottom' ? true
+                   : lastSide === 'top' ? false
+                   : (pathY > centerY);
+      if (onTop){
+        Obstacles.spawn('spikeCeiling', x, { groundY: g, ceilingY });
+        lastSide = 'top';
+      } else {
+        Obstacles.spawn('spike', x, { groundY: g });
+        lastSide = 'bottom';
       }
-      // Coin on the safe-path side (rewards the player who threads right)
+      // Coin along the safe-path
       Coins.spawn({ kind:'yellow', x: x + 50, y: pathY });
-      x += 240 + Math.random()*60;                      // 240-300px between clusters
-    }
-    // Occasional double-tooth pinch (top AND bottom close together)
-    let dx = start + 1000;
-    while (dx < end){
-      Obstacles.spawn('spike', dx, { groundY: g });
-      Obstacles.spawn('spikeCeiling', dx + 80, { groundY: g, ceilingY });
-      dx += 1400;
+      x += 320 + Math.random()*80;                      // 320-400px between spikes (was 240-300)
     }
     // Gold finish coin
     Coins.spawn({ kind:'gold', x: end - 60, y: centerY });
@@ -299,8 +305,15 @@ export const LevelPlayer = {
       if (d >= 1) Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+500, {groundY:g});
       if (d >= 2) Obstacles.spawn(cact[Math.floor(Math.random()*cact.length)], x+730, {groundY:g});
     } else if (lazr.length){
-      Obstacles.spawn('laser', x+250, {groundY:g, cy: g - 140 - Math.random()*160});
-      if (d>=1) Obstacles.spawn('laser', x+520, {groundY:g, cy: g - 220 - Math.random()*160});
+      // For ship/wave: alternate top + bottom lasers so player navigates
+      // vertically (uses both upper and lower half of arena). Place each
+      // laser closer to ceiling OR floor on alternating spawns.
+      const ceilingY = g * 0.098;
+      const topY = ceilingY + 60 + Math.random()*60;     // near ceiling
+      const botY = g - 80 - Math.random()*60;            // near floor
+      Obstacles.spawn('laser', x+250, {groundY:g, cy: topY});
+      if (d>=1) Obstacles.spawn('laser', x+520, {groundY:g, cy: botY});
+      if (d>=2) Obstacles.spawn('laser', x+760, {groundY:g, cy: (topY + botY)/2});
     } else if (spk.length){
       // For ball/spider modes: alternate floor and ceiling spikes so the player
       // MUST use gravity flip / teleport — can't just hug one surface.

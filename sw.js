@@ -1,4 +1,4 @@
-const VERSION = 'dinodash-v3-4';
+const VERSION = 'dinodash-v3-5';
 const ASSETS = [
   './',
   './index.html',
